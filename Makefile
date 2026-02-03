@@ -1,4 +1,4 @@
-APPLICATION = sx126x_metrics
+APPLICATION = srv6-lora-tester
 
 # If no BOARD is found in the environment, use this default:
 BOARD ?= esp32-heltec-lora32-v3
@@ -71,6 +71,7 @@ ifndef CONFIG_GNRC_PKTBUF_SIZE
 	CFLAGS += -DCONFIG_GNRC_PKTBUF_SIZE=512
 endif
 
+# Must set RIOTBASE before running to the directory RIOT is in
 include $(RIOTBASE)/Makefile.include
 
 # Set a custom channel if needed
