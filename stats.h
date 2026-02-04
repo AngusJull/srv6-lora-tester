@@ -24,26 +24,34 @@ struct netstat_record {
 
     // Copied from netstats_t, so that we can remove or add fields later
     uint32_t tx_unicast_count; /**< packets sent via unicast */
-    uint32_t tx_mcast_count;   /**< packets sent via multicast
-                                     (including broadcast) */
+    uint32_t tx_mcast_count;   /**< packets sent via multicast (including broadcast) */
     uint32_t tx_success;       /**< successful sending operations
-                                     (either acknowledged or unconfirmed
-                                     sending operation, e.g. multicast) */
+                                (either acknowledged or unconfirmed
+                                sending operation, e.g. multicast) */
     uint32_t tx_failed;        /**< failed sending operations */
     uint32_t tx_bytes;         /**< sent bytes */
     uint32_t rx_count;         /**< received (data) packets */
     uint32_t rx_bytes;         /**< received bytes */
 };
 
-enum capture_type {
-    CAPTURE_RECORD_TYPE_RECV,
-    CAPTURE_RECORD_TYPE_SEND,
+enum capture_event_type {
+    CAPTURE_EVENT_TYPE_RECV,
+    CAPTURE_EVENT_TYPE_SEND,
+};
+
+enum capture_packet_type {
+    CAPTURE_PACKET_TYPE_SIXLOWPAN,
+    CAPTURE_PACKET_TYPE_NETIF,
+    CAPTURE_PACKET_TYPE_UNDEF,
 };
 
 // Stats for received and sent packets
 struct capture_record {
-    enum capture_type type;
     stat_time_t time;
+    enum capture_event_type event_type;
+    enum capture_packet_type packet_type;
+    uint16_t headers_len;
+    uint16_t payload_len;
 };
 
 struct stats_thread_args {
