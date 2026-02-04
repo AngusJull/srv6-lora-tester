@@ -10,6 +10,7 @@
 struct l3_configuration {
     char *this_address;
     char **neighbour_addresses;
+    unsigned int port;
     unsigned int neighbour_addresses_len;
 };
 
@@ -33,7 +34,9 @@ enum node_role {
 
 struct traffic_configuration {
     enum node_role role;
-    int use_srv6;
+    int use_srv6;           /** If this node should use SRv6 or not */
+    char *dest_addr;        /** The destination IPv6 address if this is a sender */
+    unsigned int dest_port; /** The destination port if this is a sender */
 };
 
 struct node_configuration {

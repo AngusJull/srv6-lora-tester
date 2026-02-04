@@ -61,11 +61,13 @@ static int _dump_buffers(int argc, char **argv)
     unsigned power_count = tsrb_avail(&power_ringbuffer);
     unsigned netstat_count = tsrb_avail(&netstat_ringbuffer);
     unsigned capture_count = tsrb_avail(&capture_ringbuffer);
+    unsigned latency_count = tsrb_avail(&latency_ringbuffer);
 
-    printf("Netstat bytes/count: %u/%u, Power bytes/count: %u/%u, Capture bytes/count: %u/%u\n",
+    printf("Netstat bytes/count: %u/%u, Power bytes/count: %u/%u, Capture bytes/count: %u/%u, Latency bytes/count: %u/%u\n",
            netstat_count, netstat_count / sizeof(struct netstat_record),
            power_count, power_count / sizeof(struct power_record),
-           capture_count, capture_count / sizeof(struct capture_record));
+           capture_count, capture_count / sizeof(struct capture_record),
+           latency_count, latency_count / sizeof(struct latency_record));
 
     unsigned int current_time = ztimer_now(ZTIMER_MSEC);
     printf("Current time is %u\n", current_time);
