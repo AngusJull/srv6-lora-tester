@@ -3,13 +3,15 @@
 #include "u8x8_riotos.h"
 #include "ztimer.h"
 #include "irq.h"
-#include <stdio.h>
+#include "stdio.h"
 
 #define ENABLE_DEBUG 1
 #include "debug.h"
 
 #include "stats.h"
 #include "display.h"
+
+#define S_TO_MS                1000
 
 #define DISPLAY_DEACTIVATE_PIN GPIO_PIN(0, 36) // OLED Power Control
 #define DISPLAY_RST_PIN        GPIO_PIN(0, 21) // OLED Reset
@@ -145,7 +147,7 @@ static void *_display_loop(void *ctx)
 
         int display_route_notif = 0;
         ztimer_now_t time = ztimer_now(ZTIMER_MSEC);
-        if (time - capture.time < 2000) {
+        if (time - capture.time < S_TO_MS * 2) {
             display_route_notif = 1;
         }
 

@@ -1,12 +1,15 @@
-#include "stats.h"
 #include "net/netif.h"
+#include "net/netstats.h"
 #include "netstats.h"
 #include "battery.h"
-#include "tsrb.h"
 #include "ztimer.h"
+
+#include "stats.h"
 
 #define ENABLE_DEBUG 1
 #include "debug.h"
+
+#define S_TO_MS             1000
 
 // Threads that need to run whenever availabile
 #define THREAD_PRIORITY_MED (THREAD_PRIORITY_MAIN - 2)
@@ -38,6 +41,34 @@ static void copy_netstat_to_record(netstats_t *from, enum netstat_type type, str
     dest->time = ztimer_now(ZTIMER_MSEC);
 }
 
+static int collect_netstats(netif_t *netif, unsigned int type, tsrb_t *dest)
+{
+    netstats_t stats;
+    if (get_stats(netif, type, &stats) < 0) {
+        DEBUG("Could not read stats\n");
+    }
+    else {
+        struct netstat_record netstats;
+        enum netstat_type record_type;
+        switch (type) {
+        case NETSTATS_ALL:
+            record_type = NETSTATS_RECORD_TYPE_ALL;
+            break;
+        case NETSTATS_IPV6:
+            record_type = NETSTATS_RECORD_TYPE_IPV6;
+            break;
+        case NETSTATS_LAYER2:
+            record_type = NETSTATS_RECORD_TYPE_L2;
+            break;
+        default:
+            return -1;
+        }
+        copy_netstat_to_record(&stats, record_type, &netstats);
+        add_record(dest, (uint8_t *)&netstats, sizeof(netstats));
+    }
+    return 0;
+}
+
 // Stats collection and recording loop
 static void *_stats_loop(void *ctx)
 {
@@ -52,19 +83,12 @@ static void *_stats_loop(void *ctx)
         struct power_record power = { .time = ztimer_now(ZTIMER_MSEC), .millivolts = read_battery_mv() };
         add_record(args->power_tsrb, (uint8_t *)&power, sizeof(power));
 
-        netstats_t stats;
         if (radio_netif) {
-            if (get_stats(radio_netif, NETSTATS_LAYER2, &stats) < 0) {
-                DEBUG("Could not read stats\n");
-            }
-            else {
-                struct netstat_record netstats;
-                copy_netstat_to_record(&stats, NETSTATS_RECORD_TYPE_L2, &netstats);
-                add_record(args->netstat_tsrb, (uint8_t *)&netstats, sizeof(netstats));
-            }
+            // Collect the L2 and IPv6 stats independently so we can see difference between the two
+            collect_netstats(radio_netif, NETSTATS_LAYER2, args->netstat_tsrb);
+            collect_netstats(radio_netif, NETSTATS_IPV6, args->netstat_tsrb);
         }
-        // Draw information
-        ztimer_sleep(ZTIMER_MSEC, 1000);
+        ztimer_sleep(ZTIMER_MSEC, S_TO_MS);
     }
     return NULL;
 }
