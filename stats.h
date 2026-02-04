@@ -54,6 +54,11 @@ struct capture_record {
     uint16_t payload_len;
 };
 
+struct latency_record {
+    stat_time_t time;
+    stat_time_t round_trip_time;
+};
+
 struct stats_thread_args {
     tsrb_t *power_tsrb;
     tsrb_t *netstat_tsrb;

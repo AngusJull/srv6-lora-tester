@@ -7,21 +7,25 @@
 #include "display.h"
 #include "stats.h"
 #include "pkt_capture.h"
+#include "sendrecv.h"
 
 // Must be powers of two (limitation of tsrb)
 #define MAX_BYTES_NETSTAT_RECORDS (2 << 12)
 #define MAX_BYTES_POWER_RECORDS   (2 << 12)
 #define MAX_BYTES_CAPTURE_RECORDS (2 << 10)
+#define MAX_BYTES_LATENCY_RECORDS (2 << 8)
 
 // Allocate statically, so that we don't need to use a memory allocator/linked list
 static uint8_t netstat_buffer[MAX_BYTES_NETSTAT_RECORDS];
 static uint8_t power_buffer[MAX_BYTES_POWER_RECORDS];
 static uint8_t capture_buffer[MAX_BYTES_CAPTURE_RECORDS];
+static uint8_t latency_buffer[MAX_BYTES_LATENCY_RECORDS];
 
 // use thread safe buffers for inter-thread communication and data storage
 static tsrb_t netstat_ringbuffer;
 static tsrb_t power_ringbuffer;
 static tsrb_t capture_ringbuffer;
+static tsrb_t latency_ringbuffer;
 
 static void *_shell_loop(void *ctx)
 {
@@ -36,10 +40,12 @@ int main(void)
     tsrb_init(&netstat_ringbuffer, (unsigned char *)netstat_buffer, sizeof(netstat_buffer));
     tsrb_init(&power_ringbuffer, (unsigned char *)power_buffer, sizeof(power_buffer));
     tsrb_init(&capture_ringbuffer, (unsigned char *)capture_buffer, sizeof(capture_buffer));
+    tsrb_init(&latency_ringbuffer, (unsigned char *)latency_buffer, sizeof(latency_buffer));
 
     init_stats_thread(&(struct stats_thread_args){ .power_tsrb = &power_ringbuffer, .netstat_tsrb = &netstat_ringbuffer });
     init_display_thread(&(struct display_thread_args){ .power_ringbuffer = &power_ringbuffer, .netstat_ringbuffer = &netstat_ringbuffer, .capture_ringbuffer = &capture_ringbuffer });
     init_pkt_capture_thread(&(struct pkt_capture_thread_args){ .capture_tsrb = &capture_ringbuffer });
+    init_sendrecv_thread(&(struct sendrecv_thread_args){ .latency_tsrb = &latency_ringbuffer });
 
     (void)puts("Threads started, running shell\n");
     _shell_loop(NULL);
