@@ -71,6 +71,8 @@ ifndef CONFIG_GNRC_PKTBUF_SIZE
 	CFLAGS += -DCONFIG_GNRC_PKTBUF_SIZE=512
 endif
 
+SRC += $(wildcard src/*.c)
+
 # Must set RIOTBASE before running to the directory RIOT is in
 include $(RIOTBASE)/Makefile.include
 
