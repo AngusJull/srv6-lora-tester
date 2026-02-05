@@ -1,3 +1,4 @@
+#include "board_config.h"
 #include "shell.h"
 #include "tsrb.h"
 #include "ztimer.h"
@@ -27,6 +28,9 @@ static tsrb_t power_ringbuffer;
 static tsrb_t capture_ringbuffer;
 static tsrb_t latency_ringbuffer;
 
+// Keep the configuration in a global so we have the option to modify it in a shell command
+static struct node_configuration config;
+
 static void *_shell_loop(void *ctx)
 {
     (void)ctx;
@@ -37,6 +41,10 @@ static void *_shell_loop(void *ctx)
 
 int main(void)
 {
+    // Get the configuration for this board
+    unsigned int this_id = get_this_id();
+    config = get_node_configuration(this_id);
+
     tsrb_init(&netstat_ringbuffer, (unsigned char *)netstat_buffer, sizeof(netstat_buffer));
     tsrb_init(&power_ringbuffer, (unsigned char *)power_buffer, sizeof(power_buffer));
     tsrb_init(&capture_ringbuffer, (unsigned char *)capture_buffer, sizeof(capture_buffer));
@@ -45,7 +53,7 @@ int main(void)
     init_stats_thread(&(struct stats_thread_args){ .power_tsrb = &power_ringbuffer, .netstat_tsrb = &netstat_ringbuffer });
     init_display_thread(&(struct display_thread_args){ .power_ringbuffer = &power_ringbuffer, .netstat_ringbuffer = &netstat_ringbuffer, .capture_ringbuffer = &capture_ringbuffer });
     init_pkt_capture_thread(&(struct pkt_capture_thread_args){ .capture_tsrb = &capture_ringbuffer });
-    init_sendrecv_thread(&(struct sendrecv_thread_args){ .latency_tsrb = &latency_ringbuffer });
+    init_sendrecv_thread(&(struct sendrecv_thread_args){ .latency_tsrb = &latency_ringbuffer, .config = &config });
 
     (void)puts("Threads started, running shell\n");
     _shell_loop(NULL);

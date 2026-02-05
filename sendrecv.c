@@ -88,14 +88,16 @@ gnrc_pktsnip_t *recv(void)
 static void *_sender_loop(void *ctx)
 {
     struct sendrecv_thread_args *args = ctx;
+    const char *dest = get_node_addr(args->config->traffic_config.dest_id);
+    unsigned int dest_port = get_node_port(args->config->traffic_config.dest_id);
 
     ipv6_addr_t addr;
     // Should not fail, since this is configured
-    assert(ipv6_addr_from_str(&addr, args->config->traffic_config->dest_addr) != NULL);
+    assert(ipv6_addr_from_str(&addr, dest) != NULL);
 
     while (1) {
         ztimer_now_t start = ztimer_now(ZTIMER_MSEC);
-        send(&addr, args->config->traffic_config->dest_port, args->config->l3_config->port);
+        send(&addr, dest_port, args->config->addr_config.port);
 
         gnrc_pktsnip_t *pkt = recv();
         // For now, just assume this is a correct reponse. Could check a magic number or data later
@@ -147,11 +149,11 @@ static void *_sendrecv_thread_init(void *ctx)
 
     // Set up UDP receive for both roles
     msg_init_queue(_msg_q, QUEUE_SIZE);
-    gnrc_netreg_entry_t me_reg = GNRC_NETREG_ENTRY_INIT_PID(args->config->l3_config->port,
+    gnrc_netreg_entry_t me_reg = GNRC_NETREG_ENTRY_INIT_PID(args->config->addr_config.port,
                                                             thread_getpid());
     gnrc_netreg_register(GNRC_NETTYPE_UDP, &me_reg);
 
-    switch (args->config->traffic_config->role) {
+    switch (args->config->traffic_config.role) {
     case NODE_ROLE_SENDER:
         return _sender_loop(args);
         break;
