@@ -11,8 +11,7 @@
 #include "stats.h"
 #include "pkt_capture.h"
 
-// Threads that need to run whenever availabile
-#define THREAD_PRIORITY_MED (THREAD_PRIORITY_MAIN - 2)
+#define PKT_CAPTURE_THREAD_PRIORITY (THREAD_PRIORITY_MAIN - 4)
 // Stack for the stats thread
 static char _stack[THREAD_STACKSIZE_MEDIUM];
 // Size of the message queue for recieving packets
@@ -80,6 +79,8 @@ void add_capture_record(tsrb_t *capture_tsrb, gnrc_pktsnip_t *pkt, enum capture_
 
 static void *_pkt_capture_loop(void *ctx)
 {
+    DEBUG("pkt capturing!\n");
+
     struct pkt_capture_thread_args *args = ctx;
 
     static msg_t _msg_q[QUEUE_SIZE];
@@ -129,5 +130,5 @@ static void *_pkt_capture_loop(void *ctx)
 
 void init_pkt_capture_thread(struct pkt_capture_thread_args *args)
 {
-    thread_create(_stack, sizeof(_stack), THREAD_PRIORITY_MED, 0, _pkt_capture_loop, args, "packet capture");
+    thread_create(_stack, sizeof(_stack), PKT_CAPTURE_THREAD_PRIORITY, 0, _pkt_capture_loop, args, "packet capture");
 }

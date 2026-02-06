@@ -3,8 +3,8 @@
 #include "board_config.h"
 
 // Set the id for this board using compile flags
-#ifndef THIS_ID
-#  define THIS_ID 0
+#ifndef CONFIG_ID
+#  define CONFIG_ID 0
 #endif
 
 // Can use compile time flag ot turn on SRv6 usage
@@ -41,7 +41,7 @@ static struct traffic_configuration traffic_config[NUM_NODES] = {
 
 unsigned int get_this_id(void)
 {
-    return THIS_ID;
+    return CONFIG_ID;
 }
 
 struct node_configuration get_node_configuration(unsigned int node_id)

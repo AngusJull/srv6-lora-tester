@@ -5,36 +5,36 @@
 #include "irq.h"
 #include "stdio.h"
 
-#define ENABLE_DEBUG 0
+#define ENABLE_DEBUG 1
 #include "debug.h"
 
 #include "stats.h"
 #include "display.h"
 
-#define S_TO_MS                1000
+#define S_TO_MS                 1000
 
-#define DISPLAY_DEACTIVATE_PIN GPIO_PIN(0, 36) // OLED Power Control
-#define DISPLAY_RST_PIN        GPIO_PIN(0, 21) // OLED Reset
+#define DISPLAY_DEACTIVATE_PIN  GPIO_PIN(0, 36) // OLED Power Control
+#define DISPLAY_RST_PIN         GPIO_PIN(0, 21) // OLED Reset
 
-#define DISPLAY_I2C            0    // I2C Line, could be made into a
-#define DISPLAY_I2C_ADDR       0x3c // I2C Address
+#define DISPLAY_I2C             0    // I2C Line, could be made into a
+#define DISPLAY_I2C_ADDR        0x3c // I2C Address
 
 // Maximum character widths for integers
-#define MAX_STRLEN             30
-#define MAX_BAT_WIDTH          4 // Maximum value for battery, to prevent using more than four chars
-#define MAX_ID_WIDTH           2
-#define MAX_BYTE_WIDTH         5
-#define MAX_COUNT_WIDTH        3
+#define MAX_STRLEN              30
+#define MAX_BAT_WIDTH           4 // Maximum value for battery, to prevent using more than four chars
+#define MAX_ID_WIDTH            2
+#define MAX_BYTE_WIDTH          5
+#define MAX_COUNT_WIDTH         3
 
 // Allow integer widths to be used in string formatting
-#define _STRINGIFY(x)          #x
+#define _STRINGIFY(x)           #x
 // Force expansion of the enclosed macro
-#define STR(macro)             _STRINGIFY(macro)
+#define STR(macro)              _STRINGIFY(macro)
 
-#define DEFAULT_PAD_X          3
-#define DEFAULT_PAD_Y          3
+#define DEFAULT_PAD_X           3
+#define DEFAULT_PAD_Y           3
 
-#define THREAD_PRIORITY_MED    (THREAD_PRIORITY_MAIN - 2)
+#define DISPLAY_THREAD_PRIORITY (THREAD_PRIORITY_MAIN - 1)
 static char _stack[THREAD_STACKSIZE_MEDIUM];
 
 static u8g2_t u8g2;
@@ -153,6 +153,7 @@ static void *_display_loop(void *ctx)
 
         draw_display(power.millivolts, display_route_notif, args->config.this_id, &netstat);
         // 4Hz refresh rate to not use up too much battery life, hopefully
+        DEBUG("Display sleeping\n");
         ztimer_sleep(ZTIMER_MSEC, 200);
     }
     return NULL;
@@ -171,6 +172,6 @@ int init_display_thread(struct display_thread_args *args)
     u8g2_InitDisplay(&u8g2);
     u8g2_SetPowerSave(&u8g2, 0);
 
-    thread_create(_stack, sizeof(_stack), THREAD_PRIORITY_MED, 0, _display_loop, args, "display");
+    thread_create(_stack, sizeof(_stack), DISPLAY_THREAD_PRIORITY, 0, _display_loop, args, "display");
     return 0;
 }

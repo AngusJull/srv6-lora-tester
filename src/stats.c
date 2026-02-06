@@ -9,10 +9,10 @@
 #define ENABLE_DEBUG 1
 #include "debug.h"
 
-#define S_TO_MS             1000
+#define S_TO_MS               1000
 
-// Threads that need to run whenever availabile
-#define THREAD_PRIORITY_MED (THREAD_PRIORITY_MAIN - 2)
+#define STATS_THREAD_PRIORITY (THREAD_PRIORITY_MAIN - 2)
+#define THREAD_PRIORITY_MED   (THREAD_PRIORITY_MAIN + 1)
 // Stack for the stats thread
 static char _stack[THREAD_STACKSIZE_MEDIUM];
 
@@ -88,6 +88,7 @@ static void *_stats_loop(void *ctx)
             collect_netstats(radio_netif, NETSTATS_LAYER2, args->netstat_tsrb);
             collect_netstats(radio_netif, NETSTATS_IPV6, args->netstat_tsrb);
         }
+        DEBUG("Stats sleeping\n");
         ztimer_sleep(ZTIMER_MSEC, S_TO_MS);
     }
     return NULL;
@@ -96,6 +97,6 @@ static void *_stats_loop(void *ctx)
 // Start collecting stats
 int init_stats_thread(struct stats_thread_args *args)
 {
-    thread_create(_stack, sizeof(_stack), THREAD_PRIORITY_MED, 0, _stats_loop, args, "stats collection");
+    thread_create(_stack, sizeof(_stack), STATS_THREAD_PRIORITY, 0, _stats_loop, args, "stats collection");
     return 0;
 }

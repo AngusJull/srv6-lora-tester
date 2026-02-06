@@ -1,9 +1,13 @@
 #include "board_config.h"
+#include "net/gnrc/nettype.h"
 #include "shell.h"
 #include "tsrb.h"
 #include "ztimer.h"
 
-#include <stdio.h>
+#include "stdio.h"
+
+#define ENABLE_DEBUG 1
+#include "debug.h"
 
 #include "display.h"
 #include "stats.h"
@@ -44,6 +48,8 @@ int main(void)
     // Get the configuration for this board
     unsigned int this_id = get_this_id();
     config = get_node_configuration(this_id);
+
+    DEBUG("Node configured with id %u\n", this_id);
 
     tsrb_init(&netstat_ringbuffer, (unsigned char *)netstat_buffer, sizeof(netstat_buffer));
     tsrb_init(&power_ringbuffer, (unsigned char *)power_buffer, sizeof(power_buffer));

@@ -13,11 +13,10 @@
 
 #include "sendrecv.h"
 
-#define ENABLE_DEBUG 0
+#define ENABLE_DEBUG 1
 #include "debug.h"
 
-// Threads that need to run whenever availabile
-#define THREAD_PRIORITY_MED (THREAD_PRIORITY_MAIN - 2)
+#define SENDRECV_THREAD_PRIORITY (THREAD_PRIORITY_MAIN - 3)
 // Stack for the stats thread
 static char _stack[THREAD_STACKSIZE_MEDIUM];
 
@@ -51,6 +50,7 @@ int send(ipv6_addr_t *addr, unsigned int dest_port, unsigned int source_port)
         gnrc_pktbuf_release(ip_hdr);
         return -1;
     }
+    DEBUG("Built and sent a packet\n");
 
     return 0;
 }
@@ -82,6 +82,7 @@ gnrc_pktsnip_t *recv(void)
         default:
             break;
         }
+        DEBUG("Continuing to receive\n");
     }
 }
 
@@ -90,6 +91,7 @@ static void *_sender_loop(void *ctx)
     struct sendrecv_thread_args *args = ctx;
     const char *dest = get_node_addr(args->config->traffic_config.dest_id);
     unsigned int dest_port = get_node_port(args->config->traffic_config.dest_id);
+    DEBUG("Starting sender loop with dest %s and port %u\n", dest, dest_port);
 
     ipv6_addr_t addr;
     // Should not fail, since this is configured
@@ -99,7 +101,9 @@ static void *_sender_loop(void *ctx)
         ztimer_now_t start = ztimer_now(ZTIMER_MSEC);
         send(&addr, dest_port, args->config->addr_config.port);
 
+        DEBUG("Starting receive\n");
         gnrc_pktsnip_t *pkt = recv();
+        DEBUG("Got a response\n");
         // For now, just assume this is a correct reponse. Could check a magic number or data later
         gnrc_pktbuf_release(pkt);
         // Getting our time from the ztimer instead of the packet means our time will be consistent with
@@ -109,6 +113,8 @@ static void *_sender_loop(void *ctx)
         ztimer_now_t round_trip = start - end;
         struct latency_record latency = { .time = end, .round_trip_time = round_trip };
         add_record(args->latency_tsrb, (unsigned char *)&latency, sizeof(latency));
+        DEBUG("Added a latency record with round trip time %lu ms\n", round_trip);
+        ztimer_sleep(ZTIMER_MSEC, 1000);
     }
     return NULL;
 }
@@ -119,23 +125,29 @@ static void *_receiver_loop(void *ctx)
     (void)args;
 
     while (1) {
+        DEBUG("Waiting for an incoming packet\n");
         gnrc_pktsnip_t *pkt = recv();
+        DEBUG("Got a packet\n");
         // Should get the UDP payload first, so grab the header
         gnrc_pktsnip_t *udp_hdr = pkt->next;
         // Check assumptions about the packet's type
-        assert(udp_hdr);
-        assert(udp_hdr->type == GNRC_NETTYPE_UDP);
+        if (!(udp_hdr && udp_hdr->type == GNRC_NETTYPE_UDP)) {
+            DEBUG("Didn't get a UDP packet as expected\n");
+            continue;
+        }
         udp_hdr_t *udp_header = udp_hdr->data;
 
         gnrc_pktsnip_t *ipv6_hdr = udp_hdr->next;
-        assert(ipv6_hdr);
-        // If we add SRv6, this probably won't be true anymore
-        assert(ipv6_hdr->type == GNRC_NETTYPE_IPV6);
+        if (!(ipv6_hdr && ipv6_hdr->type == GNRC_NETTYPE_IPV6)) {
+            DEBUG("Didn't get an IPv6 packet as expected\n");
+            continue;
+        }
         ipv6_hdr_t *ipv6_header = ipv6_hdr->data;
 
         // We need to change the byte orders back to host order because the UDP header creation
         // expects it that way
         send(&ipv6_header->src, byteorder_ntohs(udp_header->src_port), byteorder_ntohs(udp_header->dst_port));
+        DEBUG("Sent a response back");
         // Make sure we release the packet's data
         gnrc_pktbuf_release(pkt);
     }
@@ -169,5 +181,5 @@ static void *_sendrecv_thread_init(void *ctx)
 
 void init_sendrecv_thread(struct sendrecv_thread_args *args)
 {
-    thread_create(_stack, sizeof(_stack), THREAD_PRIORITY_MED, 0, _sendrecv_thread_init, args, "sendrecv");
+    thread_create(_stack, sizeof(_stack), SENDRECV_THREAD_PRIORITY, 0, _sendrecv_thread_init, args, "sendrecv");
 }
