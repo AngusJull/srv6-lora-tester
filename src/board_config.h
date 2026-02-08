@@ -1,10 +1,52 @@
 #ifndef _BOARD_CONFIG_H_
 #define _BOARD_CONFIG_H_
 
+#include "stdint.h"
+#include "net/netif.h"
+
+// Set the id for this board using compile flags
+#ifndef CONFIG_ID
+#  define CONFIG_ID 0
+#endif
+
+// Can use compile time flag ot turn on SRv6 usage
+#ifndef USE_SRV6
+#  define USE_SRV6 0
+#endif
+
+// PAN ID for the network to use
+#ifndef PAN_ID
+#  define PAN_ID 0xABCD
+#endif
+
+// Context number for 6LoWPAN compression. Use 1 in case RIOT has a default use for 0
+#ifndef CONTEXT_ID
+#  define CONTEXT_ID 1
+#endif
+
+// Prefix for locally assigned addresses. RIOT has a different prefix, which is outdated as of 2004
+// (see Wikipedia for Unique Local Addresses)
+#define ULA_PREFIX "fd"
+
+// Network prefix, minus the subnet. Taken from the Wikipedia page for ULAs
+#ifndef ROUTING_PREFIX
+#  define ROUTING_PREFIX ULA_PREFIX "12:3456:789a"
+#endif
+
+// Subnet
+#ifndef SUBNET
+#  define SUBNET "0001"
+#endif
+
+// Network prefix, which preceeds all addresses. /64 length
+#ifndef NETWORK_PREFIX
+#  define NETWORK_PREFIX ROUTING_PREFIX ":" SUBNET
+#endif
+
 struct address_configuration {
-    unsigned int port; // This node's UDP port
-    char *address;     // This nodes IPv6 address
-    char *neighbours;  // List of neighbours. Currently in node ids, but could switch to IPv6 addresses
+    unsigned int port;    // This node's UDP port
+    uint64_t eui_address; // 64 bit EUI, where the bottom 16 bits are a short address
+    char *neighbours;     // List of neighbours. Currently in node ids, but could switch to IPv6 addresses
 };
 
 struct srv6_route {
@@ -38,7 +80,7 @@ struct node_configuration {
 
 unsigned int get_this_id(void);
 struct node_configuration get_node_configuration(unsigned int node_id);
-const char *get_node_addr(unsigned int node_id);
+ipv6_addr_t get_node_addr(unsigned int node_id);
 unsigned int get_node_port(unsigned int node_id);
 
 #endif // _BOARD_CONFIG_H_

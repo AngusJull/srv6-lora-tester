@@ -106,13 +106,8 @@ gnrc_pktsnip_t *recv(void)
 static void *_sender_loop(void *ctx)
 {
     struct sendrecv_thread_args *args = ctx;
-    const char *dest = get_node_addr(args->config->traffic_config.dest_id);
+    ipv6_addr_t addr = get_node_addr(args->config->traffic_config.dest_id);
     unsigned int dest_port = get_node_port(args->config->traffic_config.dest_id);
-    DEBUG("Starting sender loop with dest %s and port %u\n", dest, dest_port);
-
-    ipv6_addr_t addr;
-    // Should not fail, since this is configured
-    assert(ipv6_addr_from_str(&addr, dest) != NULL);
 
     while (1) {
         ztimer_now_t start = ztimer_now(ZTIMER_MSEC);

@@ -1,43 +1,43 @@
 #include "assert.h"
+#include "net/netif.h"
 
 #include "board_config.h"
 
-// Set the id for this board using compile flags
-#ifndef CONFIG_ID
-#  define CONFIG_ID 0
-#endif
+#include "current_config.h"
 
-// Can use compile time flag ot turn on SRv6 usage
-#ifndef USE_SRV6
-#  define USE_SRV6 0
-#endif
+static ipv6_addr_t generate_node_address(struct address_configuration *config)
+{
+    (void)config;
+    ipv6_addr_t address = { 0 };
+    return address;
+}
 
-#define NUM_NODES  2
+static int configure_802154(struct address_configuration *config)
+{
+    // Set long address
+    //
+    // Get short address
+    // Set short address
+    //
+    (void)config;
+    return 0;
+}
 
-#define LEN(array) sizeof(array) / sizeof(array[0])
+static int configure_ipv6(struct address_configuration *config)
+{
+    // Add address for long address
+    //
+    // Add address for short address
+    (void)config;
+    return 0;
+}
 
-static struct srv6_route _node0_routes[] = {
-    { .dest_id = 1, .segments = "" }
-};
-
-static struct srv6_route _node1_routes[] = {
-    { .dest_id = 0, .segments = "" }
-};
-
-static struct address_configuration addr_config[NUM_NODES] = {
-    { .port = 4000, .address = "::0", .neighbours = "1" },
-    { .port = 4000, .address = "::1", .neighbours = "0" },
-};
-
-static struct srv6_configuration srv6_config[NUM_NODES] = {
-    { .routes = _node0_routes, .routes_len = LEN(_node0_routes) },
-    { .routes = _node1_routes, .routes_len = LEN(_node1_routes) },
-};
-
-static struct traffic_configuration traffic_config[NUM_NODES] = {
-    { .role = NODE_ROLE_SENDER, .use_srv6 = USE_SRV6, .dest_id = 1 },
-    { .role = NODE_ROLE_RECIEVER, .use_srv6 = USE_SRV6, .dest_id = 0 },
-};
+static int configure_sixlowpan(struct address_configuration *config)
+{
+    // Add context for prefix
+    (void)config;
+    return 0;
+}
 
 unsigned int get_this_id(void)
 {
@@ -57,10 +57,17 @@ struct node_configuration get_node_configuration(unsigned int node_id)
     return config;
 }
 
-const char *get_node_addr(unsigned int node_id)
+int apply_node_configuration(netif_t *netif, struct node_configuration *config)
+{
+    (void)netif;
+    (void)config;
+    return 0;
+}
+
+ipv6_addr_t get_node_addr(unsigned int node_id)
 {
     assert(node_id < NUM_NODES);
-    return addr_config[node_id].address;
+    return generate_node_address(&addr_config[node_id]);
 }
 
 unsigned int get_node_port(unsigned int node_id)
