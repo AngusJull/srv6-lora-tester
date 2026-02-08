@@ -1,3 +1,4 @@
+#include "net/gnrc/nettype.h"
 #include "net/gnrc/pkt.h"
 #include "net/gnrc/pktbuf.h"
 #include "sys/errno.h"
@@ -5,7 +6,7 @@
 #include "net/gnrc/netreg.h"
 #include "ztimer.h"
 
-#define ENABLE_DEBUG 1
+#define ENABLE_DEBUG 0
 #include "debug.h"
 
 #include "stats.h"
@@ -20,6 +21,8 @@ static char _stack[THREAD_STACKSIZE_MEDIUM];
 enum capture_packet_type packet_type(gnrc_pktsnip_t *pkt)
 {
     switch (pkt->type) {
+    case GNRC_NETTYPE_SIXLOWPAN_PRENETIF:
+        // Fall-through
     case GNRC_NETTYPE_NETIF:
         return CAPTURE_PACKET_TYPE_NETIF;
     case GNRC_NETTYPE_SIXLOWPAN:
@@ -74,6 +77,7 @@ void add_capture_record(tsrb_t *capture_tsrb, gnrc_pktsnip_t *pkt, enum capture_
                                      .headers_len = lengths.headers_len,
                                      .payload_len = lengths.payload_len,
                                      .time = ztimer_now(ZTIMER_MSEC) };
+    DEBUG("Got a packet with type %d, header length %d, payload length %d\n", type, lengths.headers_len, lengths.payload_len);
     add_record(capture_tsrb, (uint8_t *)&record, sizeof(record));
 }
 
@@ -91,17 +95,21 @@ static void *_pkt_capture_loop(void *ctx)
     reply.content.value = -ENOTSUP;
 
     msg_init_queue(_msg_q, QUEUE_SIZE);
-    gnrc_netreg_entry_t me_reg = GNRC_NETREG_ENTRY_INIT_PID(GNRC_NETREG_DEMUX_CTX_ALL,
-                                                            thread_getpid());
+    gnrc_netreg_entry_t reg = GNRC_NETREG_ENTRY_INIT_PID(GNRC_NETREG_DEMUX_CTX_ALL,
+                                                         thread_getpid());
 
     // On line 292 of gnrc_ipv6.c we see `if (!gnrc_netapi_dispatch_send(GNRC_NETTYPE_SIXLOWPAN, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {`
     // when sending IPv6 packets
     // If we want to see packets as they are when being sent before compression, we should register for SIXLOWPAN or IPV6 types. If we want to see after fragmentation
     // and compression, should look for netif packets (which should be layer 2 and ready to be picked up by the IEEE 802.15.4 MAC)
-    //
-    // We can ignore received packets, since this is not useful for checking overhead or fragmentation (all relevant information can be gained from the send route)
-    gnrc_netreg_register(GNRC_NETTYPE_SIXLOWPAN, &me_reg);
-    gnrc_netreg_register(GNRC_NETTYPE_NETIF, &me_reg);
+    // if (gnrc_netreg_register(GNRC_NETTYPE_SIXLOWPAN, &reg) != 0) {
+    //     DEBUG("Failed to register for sixlowpan packets\n");
+    // }
+
+    // Because packets go directly from sixlowpan to their netif, this instead uses a small modification to the sixlowpan code to broadcast it
+    if (gnrc_netreg_register(GNRC_NETTYPE_SIXLOWPAN_PRENETIF, &reg)) {
+        DEBUG("Failed to register for sixlowpan_prenetif packets\n");
+    }
 
     while (1) {
         msg_receive(&msg);

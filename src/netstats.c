@@ -2,7 +2,7 @@
 #include "net/netopt.h"
 #include "netstats.h"
 
-#define ENABLE_DEBUG 1
+#define ENABLE_DEBUG 0
 #include "debug.h"
 
 netif_t *get_lora_netif(void)

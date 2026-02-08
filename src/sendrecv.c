@@ -13,7 +13,7 @@
 
 #include "sendrecv.h"
 
-#define ENABLE_DEBUG 1
+#define ENABLE_DEBUG 0
 #include "debug.h"
 
 #define SENDRECV_THREAD_PRIORITY (THREAD_PRIORITY_MAIN - 3)
@@ -55,6 +55,21 @@ int send(ipv6_addr_t *addr, unsigned int dest_port, unsigned int source_port)
     return 0;
 }
 
+int is_pkt_valid(gnrc_pktsnip_t *pkt)
+{
+    gnrc_pktsnip_t *udp_hdr = pkt->next;
+    if (!(udp_hdr && udp_hdr->type == GNRC_NETTYPE_UDP)) {
+        DEBUG("Didn't get a UDP packet as expected\n");
+        return 0;
+    }
+    gnrc_pktsnip_t *ipv6_hdr = udp_hdr->next;
+    if (!(ipv6_hdr && ipv6_hdr->type == GNRC_NETTYPE_IPV6)) {
+        DEBUG("Didn't get an IPv6 packet as expected\n");
+        return 0;
+    }
+    return 1;
+}
+
 gnrc_pktsnip_t *recv(void)
 {
     msg_t msg;
@@ -67,8 +82,10 @@ gnrc_pktsnip_t *recv(void)
         switch (msg.type) {
         case GNRC_NETAPI_MSG_TYPE_RCV: {
             gnrc_pktsnip_t *pkt = msg.content.ptr;
-            // Should get the payload pointer first, then headers following it
-            return pkt;
+            if (is_pkt_valid(pkt)) {
+                return pkt;
+            }
+            break;
         }
         case GNRC_NETAPI_MSG_TYPE_SND:
             // This should never happen, because we're the only sender. For now just ignore it
@@ -110,7 +127,7 @@ static void *_sender_loop(void *ctx)
         // the rest of the times we are measuring
         ztimer_now_t end = ztimer_now(ZTIMER_MSEC);
 
-        ztimer_now_t round_trip = start - end;
+        ztimer_now_t round_trip = end - start;
         struct latency_record latency = { .time = end, .round_trip_time = round_trip };
         add_record(args->latency_tsrb, (unsigned char *)&latency, sizeof(latency));
         DEBUG("Added a latency record with round trip time %lu ms\n", round_trip);
@@ -128,20 +145,11 @@ static void *_receiver_loop(void *ctx)
         DEBUG("Waiting for an incoming packet\n");
         gnrc_pktsnip_t *pkt = recv();
         DEBUG("Got a packet\n");
-        // Should get the UDP payload first, so grab the header
-        gnrc_pktsnip_t *udp_hdr = pkt->next;
-        // Check assumptions about the packet's type
-        if (!(udp_hdr && udp_hdr->type == GNRC_NETTYPE_UDP)) {
-            DEBUG("Didn't get a UDP packet as expected\n");
-            continue;
-        }
-        udp_hdr_t *udp_header = udp_hdr->data;
 
+        // Assume packet has been verified to be correct
+        gnrc_pktsnip_t *udp_hdr = pkt->next;
+        udp_hdr_t *udp_header = udp_hdr->data;
         gnrc_pktsnip_t *ipv6_hdr = udp_hdr->next;
-        if (!(ipv6_hdr && ipv6_hdr->type == GNRC_NETTYPE_IPV6)) {
-            DEBUG("Didn't get an IPv6 packet as expected\n");
-            continue;
-        }
         ipv6_hdr_t *ipv6_header = ipv6_hdr->data;
 
         // We need to change the byte orders back to host order because the UDP header creation

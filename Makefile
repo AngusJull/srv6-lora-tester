@@ -55,6 +55,10 @@ USEMODULE += netstats_ipv6
 # use IEEE802154 for sx126x instead of LoRa or RAW modes
 USEMODULE += sx126x_ieee802154
 
+# use a pseudomodule added for this application, which will allow packets to be intercepted
+# when being sent from sixlowpan to the netif (impossible otherwise without adding an intermediate netif)
+USEMODULE += gnrc_nettype_sixlowpan_prenetif
+
 # use modules for displaying stats on board OLED displays
 
 USEPKG += u8g2

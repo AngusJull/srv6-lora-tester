@@ -5,7 +5,7 @@
 #include "irq.h"
 #include "stdio.h"
 
-#define ENABLE_DEBUG 1
+#define ENABLE_DEBUG 0
 #include "debug.h"
 
 #include "stats.h"
@@ -96,13 +96,13 @@ void draw_display(unsigned int battery_mv, int display_route_notif, unsigned int
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "STATS");
         next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
 
-        snprintf(text_buffer, sizeof(text_buffer), "TX PKT SUCC:%u FAIL:%u",
+        snprintf(text_buffer, sizeof(text_buffer), "TX SUCC:%u FAIL:%u",
                  clamp_width(main_stats->tx_success, MAX_COUNT_WIDTH),
                  clamp_width(main_stats->tx_failed, MAX_COUNT_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer);
         next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
 
-        snprintf(text_buffer, sizeof(text_buffer), "RX PKT TOT:%u",
+        snprintf(text_buffer, sizeof(text_buffer), "RX:%u",
                  clamp_width(main_stats->rx_count, MAX_COUNT_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer);
         next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
