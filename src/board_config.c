@@ -1,11 +1,13 @@
 #include "assert.h"
+#include "net/gnrc/netif/conf.h"
 #include "net/gnrc/sixlowpan/ctx.h"
 
 #include "current_config.h"
+#include "net/ipv6/addr.h"
 #include "net/netopt.h"
 #include "board_config.h"
 
-#define ENABLE_DEBUG 1
+#define ENABLE_DEBUG 0
 #include "debug.h"
 
 static uint64_t short_addr_iid(uint64_t eui_address)
@@ -33,7 +35,6 @@ static ipv6_addr_t generate_ipv6_addr(uint64_t iid)
 static int configure_802154(gnrc_netif_t *netif, struct address_configuration *config)
 {
     uint16_t pan_id = PAN_ID;
-    // TODO: check context, and if PAN_ID needs to be in network byte order
     if (gnrc_netapi_set(netif->pid, NETOPT_NID, 0, &pan_id, sizeof(pan_id)) < 0) {
         printf("Failed to configure PAN ID of %u\n", pan_id);
         return -1;
@@ -48,16 +49,16 @@ static int configure_802154(gnrc_netif_t *netif, struct address_configuration *c
     long_addr.u64 = config->eui_address;
     uint64_t long_addr_ordered = htonll(long_addr.u64);
     if (gnrc_netapi_set(netif->pid, NETOPT_ADDRESS_LONG, 0, &long_addr_ordered, sizeof(long_addr_ordered)) < 0) {
-        printf("Failed to configure long addr of %" PRIx32 "%" PRIx32 "\n", long_addr.u32[0], long_addr.u32[1]);
+        printf("Failed to configure long addr of 0x%" PRIx32 "%" PRIx32 "\n", long_addr.u32[0], long_addr.u32[1]);
         return -1;
     }
-    DEBUG("Configured long address of %" PRIx32 "%" PRIx32 "\n", long_addr.u32[0], long_addr.u32[1]);
+    DEBUG("Configured long address of 0x%" PRIx32 "%" PRIx32 "\n", long_addr.u32[1], long_addr.u32[0]);
 
     // Set both the short and long addresses so there isn't any mismatch with what we configure for IPv6
     uint16_t short_addr = EUI_64_TO_SHORT_ADDR(config->eui_address);
     uint16_t short_addr_ordered = htons(short_addr);
     if (gnrc_netapi_set(netif->pid, NETOPT_ADDRESS, 0, &short_addr_ordered, sizeof(short_addr_ordered)) < 0) {
-        printf("Failed to configure short addr of %u\n", short_addr);
+        printf("Failed to configure short addr of 0x%x\n", short_addr);
         return -1;
     }
     DEBUG("Configured short address 0x%x\n", short_addr);
@@ -65,25 +66,42 @@ static int configure_802154(gnrc_netif_t *netif, struct address_configuration *c
     return 0;
 }
 
+static void remove_all_ipv6_addrs(gnrc_netif_t *netif)
+{
+    ipv6_addr_t curr_addrs[CONFIG_GNRC_NETIF_IPV6_ADDRS_NUMOF];
+    int addrs_len = gnrc_netif_ipv6_addrs_get(netif, curr_addrs, sizeof(curr_addrs));
+    for (unsigned i = 0; i < addrs_len / sizeof(curr_addrs[0]); i++) {
+        // Remove the site local address, since it is link local and includes old hw address
+        gnrc_netif_ipv6_addr_remove(netif, &curr_addrs[i]);
+#if ENABLE_DEBUG == 1
+        DEBUG("Removing address ");
+        ipv6_addr_print(&curr_addrs[i]);
+        DEBUG("\n");
+#endif
+    }
+}
+
 static int configure_ipv6(gnrc_netif_t *netif, struct address_configuration *config)
 {
     // We need to remove previous IP addresses to make sure all our messages are being compressed properly
-    // TODO: Add removal of other addresses
+    remove_all_ipv6_addrs(netif);
 
     ipv6_addr_t long_addr = generate_ipv6_addr(config->eui_address);
     if (gnrc_netif_ipv6_addr_add(netif, &long_addr, NETWORK_PREFIX_LEN, 0) < 0) {
         printf("Could not set IPv6 address for long address\n");
+        ipv6_addr_print(&long_addr);
         return -1;
     }
 
     // We add both long and short addresses so we can choose between using either in messages
     ipv6_addr_t short_addr = generate_ipv6_addr(short_addr_iid(config->eui_address));
-    if (gnrc_netif_ipv6_addr_add(netif, &long_addr, NETWORK_PREFIX_LEN, 0) < 0) {
+    if (gnrc_netif_ipv6_addr_add(netif, &short_addr, NETWORK_PREFIX_LEN, 0) < 0) {
         printf("Could not set IPv6 address for short address\n");
+        ipv6_addr_print(&short_addr);
         return -1;
     }
 
-#if defined(ENABLE_DEBUG)
+#if ENABLE_DEBUG == 1
     // Using conditional block to use built in prints instead of messing with big endian u64s
     DEBUG("Configured short address: ");
     ipv6_addr_print(&short_addr);
@@ -135,15 +153,15 @@ struct node_configuration get_node_configuration(unsigned int node_id)
 int apply_node_configuration(gnrc_netif_t *netif, struct node_configuration *config)
 {
     if (configure_802154(netif, &config->addr_config) < 0) {
-        DEBUG("Could not apply 802.15.4 configuration completely\n");
+        puts("Could not apply 802.15.4 configuration completely\n");
         return -1;
     }
     if (configure_ipv6(netif, &config->addr_config) < 0) {
-        DEBUG("Could not apply IPv6 conifguration completely\n");
+        puts("Could not apply IPv6 conifguration completely\n");
         return -1;
     }
     if (configure_sixlowpan()) {
-        DEBUG("Could not apply sixlowpan confiugration completely\n");
+        puts("Could not apply sixlowpan confiugration completely\n");
         return -1;
     }
     return 0;
