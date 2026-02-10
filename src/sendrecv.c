@@ -3,17 +3,17 @@
 // Thread should read configuration from its arguments, then send a packet using srv6 if specified.
 // Thread should then wait for a response. Upon receiving it, it puts some info into another TSRB and we can get that later
 
+#include "net/gnrc/ipv6/hdr.h"
 #include "net/gnrc/pkt.h"
 #include "net/gnrc/pktbuf.h"
 #include "net/gnrc/udp.h"
-#include "net/gnrc/ipv6.h"
 
 #include "stats.h"
 #include "ztimer.h"
 
 #include "sendrecv.h"
 
-#define ENABLE_DEBUG 0
+#define ENABLE_DEBUG 1
 #include "debug.h"
 
 #define SENDRECV_THREAD_PRIORITY (THREAD_PRIORITY_MAIN - 3)
@@ -24,7 +24,7 @@ static char _stack[THREAD_STACKSIZE_MEDIUM];
 #define QUEUE_SIZE 8
 static msg_t _msg_q[QUEUE_SIZE];
 
-int send(ipv6_addr_t *addr, unsigned int dest_port, unsigned int source_port)
+int send(ipv6_addr_t *source_addr, ipv6_addr_t *dest_addr, unsigned int dest_port, unsigned int source_port)
 {
     uint32_t data = 32;
 
@@ -39,7 +39,7 @@ int send(ipv6_addr_t *addr, unsigned int dest_port, unsigned int source_port)
         gnrc_pktbuf_release(pkt);
         return -1;
     }
-    gnrc_pktsnip_t *ip_hdr = gnrc_ipv6_hdr_build(udp_hdr, NULL, addr);
+    gnrc_pktsnip_t *ip_hdr = gnrc_ipv6_hdr_build(udp_hdr, source_addr, dest_addr);
     if (ip_hdr == NULL) {
         DEBUG("Error: unable to allocate IPv6 header\n");
         gnrc_pktbuf_release(udp_hdr);
@@ -53,6 +53,22 @@ int send(ipv6_addr_t *addr, unsigned int dest_port, unsigned int source_port)
     DEBUG("Built and sent a packet\n");
 
     return 0;
+}
+
+void debug_print_pkt(gnrc_pktsnip_t *pkt)
+{
+#if ENABLE_DEBUG == 1
+    gnrc_pktsnip_t *udp_hdr = pkt->next;
+    udp_hdr_t *udp_header = udp_hdr->data;
+    gnrc_pktsnip_t *ipv6_hdr = udp_hdr->next;
+    ipv6_hdr_t *ipv6_header = ipv6_hdr->data;
+
+    DEBUG("Packet UDP header src %u dst %u\n", byteorder_ntohs(udp_header->src_port), byteorder_ntohs(udp_header->dst_port));
+    DEBUG("Packet IPv6 header src ");
+    ipv6_addr_print(&ipv6_header->src);
+    DEBUG(" dst");
+    ipv6_addr_print(&ipv6_header->dst);
+#endif
 }
 
 int is_pkt_valid(gnrc_pktsnip_t *pkt)
@@ -106,16 +122,18 @@ gnrc_pktsnip_t *recv(void)
 static void *_sender_loop(void *ctx)
 {
     struct sendrecv_thread_args *args = ctx;
-    ipv6_addr_t addr = get_node_addr(args->config->traffic_config.dest_id);
+    ipv6_addr_t source_addr = get_node_addr(args->config->this_id);
+    ipv6_addr_t dest_addr = get_node_addr(args->config->traffic_config.dest_id);
     unsigned int dest_port = get_node_port(args->config->traffic_config.dest_id);
 
     while (1) {
         ztimer_now_t start = ztimer_now(ZTIMER_MSEC);
-        send(&addr, dest_port, args->config->addr_config.port);
+        send(&source_addr, &dest_addr, dest_port, args->config->addr_config.port);
 
         DEBUG("Starting receive\n");
         gnrc_pktsnip_t *pkt = recv();
         DEBUG("Got a response\n");
+        debug_print_pkt(pkt);
         // For now, just assume this is a correct reponse. Could check a magic number or data later
         gnrc_pktbuf_release(pkt);
         // Getting our time from the ztimer instead of the packet means our time will be consistent with
@@ -134,12 +152,13 @@ static void *_sender_loop(void *ctx)
 static void *_receiver_loop(void *ctx)
 {
     struct sendrecv_thread_args *args = ctx;
-    (void)args;
+    ipv6_addr_t source_addr = get_node_addr(args->config->this_id);
 
     while (1) {
         DEBUG("Waiting for an incoming packet\n");
         gnrc_pktsnip_t *pkt = recv();
         DEBUG("Got a packet\n");
+        debug_print_pkt(pkt);
 
         // Assume packet has been verified to be correct
         gnrc_pktsnip_t *udp_hdr = pkt->next;
@@ -149,7 +168,7 @@ static void *_receiver_loop(void *ctx)
 
         // We need to change the byte orders back to host order because the UDP header creation
         // expects it that way
-        send(&ipv6_header->src, byteorder_ntohs(udp_header->src_port), byteorder_ntohs(udp_header->dst_port));
+        send(&source_addr, &ipv6_header->src, byteorder_ntohs(udp_header->src_port), byteorder_ntohs(udp_header->dst_port));
         DEBUG("Sent a response back");
         // Make sure we release the packet's data
         gnrc_pktbuf_release(pkt);

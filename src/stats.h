@@ -41,7 +41,7 @@ enum capture_event_type {
 
 enum capture_packet_type {
     CAPTURE_PACKET_TYPE_SIXLOWPAN,
-    CAPTURE_PACKET_TYPE_NETIF,
+    CAPTURE_PACKET_TYPE_IPV6,
     CAPTURE_PACKET_TYPE_UNDEF,
 };
 
