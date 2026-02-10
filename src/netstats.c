@@ -5,22 +5,9 @@
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
-netif_t *get_lora_netif(void)
+gnrc_netif_t *get_lora_netif(void)
 {
-    netif_t *next = netif_iter(NULL);
-    while (next) {
-        uint16_t type;
-        int res = netif_get_opt(next, NETOPT_DEVICE_TYPE, 0, &type, sizeof(type));
-        if (res < 0) {
-            DEBUG("Failed to get device type!\n");
-        }
-
-        if (type == NETDEV_TYPE_IEEE802154) {
-            // Assume there's probably only one IEEE802.15.4 radio
-            return next;
-        }
-    }
-    return NULL;
+    return gnrc_netif_get_by_type(NETDEV_SX126X, NETDEV_INDEX_ANY);
 }
 
 int get_stats(netif_t *netif, unsigned int type, netstats_t *stats)

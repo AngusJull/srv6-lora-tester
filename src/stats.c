@@ -73,9 +73,9 @@ static int collect_netstats(netif_t *netif, unsigned int type, tsrb_t *dest)
 static void *_stats_loop(void *ctx)
 {
     struct stats_thread_args *args = ctx;
-    netif_t *radio_netif = get_lora_netif();
+    gnrc_netif_t *radio_netif = get_lora_netif();
     DEBUG("Radio netif identified as %p\n", radio_netif);
-    print_netif_name(radio_netif);
+    print_netif_name(&radio_netif->netif);
 
     init_battery_adc();
     while (1) {
@@ -85,8 +85,8 @@ static void *_stats_loop(void *ctx)
 
         if (radio_netif) {
             // Collect the L2 and IPv6 stats independently so we can see difference between the two
-            collect_netstats(radio_netif, NETSTATS_LAYER2, args->netstat_tsrb);
-            collect_netstats(radio_netif, NETSTATS_IPV6, args->netstat_tsrb);
+            collect_netstats(&radio_netif->netif, NETSTATS_LAYER2, args->netstat_tsrb);
+            collect_netstats(&radio_netif->netif, NETSTATS_IPV6, args->netstat_tsrb);
         }
         DEBUG("Stats sleeping\n");
         ztimer_sleep(ZTIMER_MSEC, S_TO_MS);

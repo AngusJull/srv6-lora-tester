@@ -9,6 +9,7 @@
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
+#include "netstats.h"
 #include "display.h"
 #include "stats.h"
 #include "pkt_capture.h"
@@ -50,6 +51,12 @@ int main(void)
     config = get_node_configuration(this_id);
 
     DEBUG("Node configured with id %u\n", this_id);
+
+    // Apply configuration
+    gnrc_netif_t *radio = get_lora_netif();
+    assert(radio != NULL);
+    apply_node_configuration(radio, &config);
+    DEBUG("Applied configuration\n");
 
     tsrb_init(&netstat_ringbuffer, (unsigned char *)netstat_buffer, sizeof(netstat_buffer));
     tsrb_init(&power_ringbuffer, (unsigned char *)power_buffer, sizeof(power_buffer));

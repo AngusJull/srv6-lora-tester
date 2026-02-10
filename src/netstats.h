@@ -1,10 +1,10 @@
 #ifndef _NETSTATS_H_
 #define _NETSTATS_H_
 
-#include "net/netif.h"
+#include "net/gnrc/netif.h"
 #include "net/netstats.h"
 
-netif_t *get_lora_netif(void);
+gnrc_netif_t *get_lora_netif(void);
 
 int get_stats(netif_t *netif, unsigned int type, netstats_t *stats);
 

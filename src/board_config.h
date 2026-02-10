@@ -2,7 +2,7 @@
 #define _BOARD_CONFIG_H_
 
 #include "stdint.h"
-#include "net/netif.h"
+#include "net/gnrc/netif.h"
 
 // Set the id for this board using compile flags
 #ifndef CONFIG_ID
@@ -24,13 +24,20 @@
 #  define CONTEXT_ID 1
 #endif
 
+// Keep the bottom byte when generating a short address
+#define EUI_64_TO_SHORT_ADDR(address) (address & 0xFFFF)
+
+// Turn a short address into an IID to use in an IPv6 address
+// An IID for a short addr is of the form "::00ff:fe00:XXXX"
+#define SHORT_ADDR_TO_IID(address)    (0x00FFFE000000 | address)
+
 // Prefix for locally assigned addresses. RIOT has a different prefix, which is outdated as of 2004
 // (see Wikipedia for Unique Local Addresses)
-#define ULA_PREFIX "fd"
+#define ULA_PREFIX                    "fd"
 
 // Network prefix, minus the subnet. Taken from the Wikipedia page for ULAs
 #ifndef ROUTING_PREFIX
-#  define ROUTING_PREFIX ULA_PREFIX "12:3456:789a"
+#  define ROUTING_PREFIX ULA_PREFIX "ab:0:0"
 #endif
 
 // Subnet
@@ -40,7 +47,11 @@
 
 // Network prefix, which preceeds all addresses. /64 length
 #ifndef NETWORK_PREFIX
-#  define NETWORK_PREFIX ROUTING_PREFIX ":" SUBNET
+#  define NETWORK_PREFIX ROUTING_PREFIX ":" SUBNET "::"
+#endif
+
+#ifndef NETWORK_PREFIX_LEN
+#  define NETWORK_PREFIX_LEN 64
 #endif
 
 struct address_configuration {
@@ -80,6 +91,7 @@ struct node_configuration {
 
 unsigned int get_this_id(void);
 struct node_configuration get_node_configuration(unsigned int node_id);
+int apply_node_configuration(gnrc_netif_t *netif, struct node_configuration *config);
 ipv6_addr_t get_node_addr(unsigned int node_id);
 unsigned int get_node_port(unsigned int node_id);
 
