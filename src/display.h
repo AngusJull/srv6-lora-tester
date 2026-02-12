@@ -9,7 +9,7 @@ struct display_thread_args {
     tsrb_t *power_ringbuffer;
     tsrb_t *netstat_ringbuffer;
     tsrb_t *capture_ringbuffer;
-    struct node_configuration config;
+    struct node_configuration *config;
 };
 
 int init_display_thread(struct display_thread_args *args);

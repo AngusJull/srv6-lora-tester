@@ -151,7 +151,7 @@ static void *_display_loop(void *ctx)
             display_route_notif = 1;
         }
 
-        draw_display(power.millivolts, display_route_notif, args->config.this_id, &netstat);
+        draw_display(power.millivolts, display_route_notif, args->config->this_id, &netstat);
         // 4Hz refresh rate to not use up too much battery life, hopefully
         DEBUG("Display sleeping\n");
         ztimer_sleep(ZTIMER_MSEC, 200);

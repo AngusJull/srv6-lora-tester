@@ -49,15 +49,12 @@ int main(void)
     // Get the configuration for this board
     unsigned int this_id = get_this_id();
     config = get_node_configuration(this_id);
-
-    DEBUG("Node configured with id %u\n", this_id);
-
     // Apply configuration
     gnrc_netif_t *radio = get_lora_netif();
     assert(radio != NULL);
     // No point continuing if we can't configure correctly
     assert(apply_node_configuration(radio, &config) == 0);
-    DEBUG("Applied configuration\n");
+    DEBUG("Applied configuration for node %u\n", this_id);
 
     tsrb_init(&netstat_ringbuffer, (unsigned char *)netstat_buffer, sizeof(netstat_buffer));
     tsrb_init(&power_ringbuffer, (unsigned char *)power_buffer, sizeof(power_buffer));
@@ -65,7 +62,7 @@ int main(void)
     tsrb_init(&latency_ringbuffer, (unsigned char *)latency_buffer, sizeof(latency_buffer));
 
     init_stats_thread(&(struct stats_thread_args){ .power_tsrb = &power_ringbuffer, .netstat_tsrb = &netstat_ringbuffer });
-    init_display_thread(&(struct display_thread_args){ .power_ringbuffer = &power_ringbuffer, .netstat_ringbuffer = &netstat_ringbuffer, .capture_ringbuffer = &capture_ringbuffer });
+    init_display_thread(&(struct display_thread_args){ .power_ringbuffer = &power_ringbuffer, .netstat_ringbuffer = &netstat_ringbuffer, .capture_ringbuffer = &capture_ringbuffer, .config = &config });
     init_pkt_capture_thread(&(struct pkt_capture_thread_args){ .capture_tsrb = &capture_ringbuffer });
     init_sendrecv_thread(&(struct sendrecv_thread_args){ .latency_tsrb = &latency_ringbuffer, .config = &config });
 
