@@ -143,7 +143,7 @@ static void *_sender_loop(void *ctx)
         ztimer_now_t round_trip = end - start;
         struct latency_record latency = { .time = end, .round_trip_time = round_trip };
         add_record(args->latency_tsrb, (unsigned char *)&latency, sizeof(latency));
-        DEBUG("Added a latency record with round trip time %lu ms\n", round_trip);
+        DEBUG("Added a latency record with round trip time %" PRIu32 " ms\n", round_trip);
         ztimer_sleep(ZTIMER_MSEC, 1000);
     }
     return NULL;

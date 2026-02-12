@@ -45,8 +45,6 @@ USEMODULE += gnrc_pktdump
 USEMODULE += gnrc_udp
 #include test program for udp send/recv
 USEMODULE += shell_cmd_gnrc_udp
-# include shell program for inspecting and modifying forwarding information base
-USEMODULE += fib
 # icmpv6 error message support
 USEMODULE += gnrc_icmpv6_error
 # enable stats
