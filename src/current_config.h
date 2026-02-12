@@ -13,6 +13,7 @@
 #define LEN(array)           sizeof(array) / sizeof(array[0])
 
 // EUI prefix, so that node short addresses can just be the last two bytes. Patten should help spot problems
+// Keep bit 7 as 1 (locally assigned)
 #define EUI_PREFIX_48        0xAEFEBEFECEFE0000
 
 #define UDP_PORT             4000

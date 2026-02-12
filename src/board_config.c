@@ -11,23 +11,28 @@
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
-static uint64_t short_addr_iid(uint64_t eui_address)
-{
-    uint16_t short_addr = EUI_64_TO_SHORT_ADDR(eui_address);
-    return SHORT_ADDR_TO_IID(short_addr);
-}
+// Flip the flag to keep the same scope (locally assigned stays locally assigned)
+#define FLIP_EUI_LOCAL_FLAG(eui) (eui ^ 0x200000000000000)
 
-static ipv6_addr_t generate_ipv6_addr(uint64_t iid)
+static ipv6_addr_t generate_ipv6_addr(uint64_t eui)
 {
-    ipv6_addr_t prefix;
-    if (ipv6_addr_from_str(&prefix, NETWORK_PREFIX) == NULL) {
+    ipv6_addr_t addr;
+    if (ipv6_addr_from_str(&addr, NETWORK_PREFIX) == NULL) {
         printf("Could not load prefix\n");
     }
 
-    ipv6_addr_t addr;
-    ipv6_addr_set_iid(&addr, iid);
-    ipv6_addr_init_prefix(&addr, &prefix, NETWORK_PREFIX_LEN);
+    eui = FLIP_EUI_LOCAL_FLAG(eui);
+    ipv6_addr_set_iid(&addr, eui);
+    return addr;
+}
 
+static ipv6_addr_t generate_link_local_ipv6_addr(uint64_t eui)
+{
+    ipv6_addr_t addr;
+    ipv6_addr_set_link_local_prefix(&addr);
+
+    eui = FLIP_EUI_LOCAL_FLAG(eui);
+    ipv6_addr_set_iid(&addr, eui);
     return addr;
 }
 
@@ -94,18 +99,17 @@ static int configure_ipv6(gnrc_netif_t *netif, struct address_configuration *con
         return -1;
     }
 
-    // We add both long and short addresses so we can choose between using either in messages
-    ipv6_addr_t short_addr = generate_ipv6_addr(short_addr_iid(config->eui_address));
-    if (gnrc_netif_ipv6_addr_add(netif, &short_addr, NETWORK_PREFIX_LEN, 0) < 0) {
-        printf("Could not set IPv6 address for short address\n");
-        ipv6_addr_print(&short_addr);
+    ipv6_addr_t local_addr = generate_link_local_ipv6_addr(config->eui_address);
+    if (gnrc_netif_ipv6_addr_add(netif, &local_addr, NETWORK_PREFIX_LEN, 0) < 0) {
+        printf("Could not set link local IPv6 address\n");
+        ipv6_addr_print(&long_addr);
         return -1;
     }
 
 #if ENABLE_DEBUG == 1
     // Using conditional block to use built in prints instead of messing with big endian u64s
-    DEBUG("Configured short address: ");
-    ipv6_addr_print(&short_addr);
+    DEBUG("Configured link local address: ");
+    ipv6_addr_print(&local_addr);
     DEBUG("\nConfigured long address: ");
     ipv6_addr_print(&long_addr);
     DEBUG("\n");
@@ -138,7 +142,7 @@ static int configure_forwarding_entries(gnrc_netif_t *netif, struct forwarding_c
     for (unsigned i = 0; i < config->forwarding_entires_len; i++) {
         struct forwarding_entry *entry = &config->forwarding_entries[i];
         ipv6_addr_t dest_addr = get_node_addr(entry->dest_id);
-        ipv6_addr_t next_hop_addr = get_node_addr(entry->next_hop_id);
+        ipv6_addr_t next_hop_addr = generate_link_local_ipv6_addr(addr_config[entry->next_hop_id].eui_address);
         // Currently, only add fully specified next hops and destinations, to keep things simple
         if (gnrc_ipv6_nib_ft_add(&dest_addr, IPV6_ADDR_BIT_LEN, &next_hop_addr, netif->pid, 0) != 0) {
             printf("Failed to add a routing table entry for dest %u, next hop %u\n", entry->dest_id, entry->next_hop_id);
