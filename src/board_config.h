@@ -57,7 +57,16 @@
 struct address_configuration {
     unsigned int port;    // This node's UDP port
     uint64_t eui_address; // 64 bit EUI, where the bottom 16 bits are a short address
-    char *neighbours;     // List of neighbours. Currently in node ids, but could switch to IPv6 addresses
+};
+
+struct forwarding_entry {
+    unsigned dest_id;
+    unsigned next_hop_id;
+};
+
+struct forwarding_configuration {
+    struct forwarding_entry *forwarding_entries; // The forwarding entries to add for this node
+    unsigned int forwarding_entires_len;         // Length of the forwarding entries array
 };
 
 struct srv6_route {
@@ -84,9 +93,10 @@ struct traffic_configuration {
 
 struct node_configuration {
     unsigned int this_id;
-    struct address_configuration addr_config;    // The addresses of this node and its neighbours
-    struct srv6_configuration srv6_config;       // The srv6 routes, if this node is a sender and uses srv6 (otherwise null)
-    struct traffic_configuration traffic_config; // The role for this node and configuration related to send/recieve
+    struct address_configuration addr_config;          // The addresses of this node and its neighbours
+    struct srv6_configuration srv6_config;             // The srv6 routes, if this node is a sender and uses srv6 (otherwise null)
+    struct forwarding_configuration forwarding_config; // Forwarding entires to add for this node
+    struct traffic_configuration traffic_config;       // The role for this node and configuration related to send/recieve
 };
 
 unsigned int get_this_id(void);

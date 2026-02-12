@@ -24,18 +24,31 @@ static struct srv6_route _node0_routes[] = {
     { .dest_id = 1, .segments = "" }
 };
 
+static struct forwarding_entry _node0_fib[] = {
+    { .dest_id = 1, .next_hop_id = 1 },
+};
+
 static struct srv6_route _node1_routes[] = {
     { .dest_id = 0, .segments = "" }
 };
 
+static struct forwarding_entry _node1_fib[] = {
+    { .dest_id = 0, .next_hop_id = 0 }
+};
+
 static struct address_configuration addr_config[NUM_NODES] = {
-    { .eui_address = EUI_64_ADDR(0), .port = UDP_PORT, .neighbours = "1" },
-    { .eui_address = EUI_64_ADDR(1), .port = UDP_PORT, .neighbours = "0" },
+    { .eui_address = EUI_64_ADDR(0), .port = UDP_PORT },
+    { .eui_address = EUI_64_ADDR(1), .port = UDP_PORT },
 };
 
 static struct srv6_configuration srv6_config[NUM_NODES] = {
     { .routes = _node0_routes, .routes_len = LEN(_node0_routes) },
     { .routes = _node1_routes, .routes_len = LEN(_node1_routes) },
+};
+
+static struct forwarding_configuration forwarding_config[NUM_NODES] = {
+    { .forwarding_entries = _node0_fib, .forwarding_entires_len = LEN(_node0_fib) },
+    { .forwarding_entries = _node1_fib, .forwarding_entires_len = LEN(_node1_fib) }
 };
 
 static struct traffic_configuration traffic_config[NUM_NODES] = {

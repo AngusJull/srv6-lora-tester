@@ -55,7 +55,8 @@ int main(void)
     // Apply configuration
     gnrc_netif_t *radio = get_lora_netif();
     assert(radio != NULL);
-    apply_node_configuration(radio, &config);
+    // No point continuing if we can't configure correctly
+    assert(apply_node_configuration(radio, &config) == 0);
     DEBUG("Applied configuration\n");
 
     tsrb_init(&netstat_ringbuffer, (unsigned char *)netstat_buffer, sizeof(netstat_buffer));
