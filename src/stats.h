@@ -54,8 +54,14 @@ struct capture_record {
     uint16_t payload_len;
 };
 
+enum latency_record_type {
+    LATENCY_RECORD_TYPE_NOT_RECEIVED,
+    LATENCY_RECORD_TYPE_NOMINAL,
+};
+
 struct latency_record {
     stat_time_t time;
+    enum latency_record_type type;
     stat_time_t round_trip_time;
 };
 

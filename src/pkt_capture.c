@@ -92,7 +92,7 @@ static int check_pkt_netif(gnrc_pktsnip_t *pkt, int netif_pid)
         if (netif_hdr->if_pid == netif_pid) {
             return 1;
         }
-        DEBUG("Packet was destined for wrong interface and filtered: %d\n", netif_hdr->if_pid);
+        DEBUG("Captured packet was destined for wrong interface and filtered: %d\n", netif_hdr->if_pid);
     }
     return 0;
 }
