@@ -6,6 +6,10 @@
 
 typedef uint32_t stat_time_t;
 
+#ifndef STAT_TIME_FMT
+#  define STAT_TIME_FMT PRIu32
+#endif
+
 struct power_record {
     stat_time_t time;
     uint32_t millivolts;
@@ -73,5 +77,10 @@ struct stats_thread_args {
 int init_stats_thread(struct stats_thread_args *args);
 
 int add_record(tsrb_t *tsrb, uint8_t *record, size_t size);
+
+void print_power_record(struct power_record *record);
+void print_netstat_record(struct netstat_record *record);
+void print_capture_record(struct capture_record *record);
+void print_latency_record(struct latency_record *record);
 
 #endif // _STATS_H_

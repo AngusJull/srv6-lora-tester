@@ -72,7 +72,7 @@ int main(void)
     return 0;
 }
 
-static int _dump_buffers(int argc, char **argv)
+static int _buffer_state(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
@@ -93,4 +93,58 @@ static int _dump_buffers(int argc, char **argv)
     return 0;
 }
 
-SHELL_COMMAND(dump_buf, "Dump the stats collection buffers or associated information", _dump_buffers);
+static int _dump_buffer(int argc, char **argv)
+{
+    // Eventually, could pass arguments to filter results
+    (void)argc;
+    (void)argv;
+
+    puts("{");
+    printf("\"node_id\":%u,", CONFIG_ID);
+
+    {
+        printf("\"latency_records\": [");
+        struct latency_record record;
+        while (tsrb_get(&latency_ringbuffer, (uint8_t *)&record, sizeof(record)) == sizeof(record)) {
+            print_latency_record(&record);
+            puts(",");
+        }
+        puts("],");
+    }
+
+    {
+        printf("\"capture_records\": [");
+        struct capture_record record;
+        while (tsrb_get(&capture_ringbuffer, (uint8_t *)&record, sizeof(record)) == sizeof(record)) {
+            print_capture_record(&record);
+            puts(",");
+        }
+        puts("],");
+    }
+
+    {
+        printf("\"power_records\": [");
+        struct power_record record;
+        while (tsrb_get(&power_ringbuffer, (uint8_t *)&record, sizeof(record)) == sizeof(record)) {
+            print_power_record(&record);
+            puts(",");
+        }
+        puts("],");
+    }
+
+    {
+        printf("\"netstat_records\": [");
+        struct netstat_record record;
+        while (tsrb_get(&netstat_ringbuffer, (uint8_t *)&record, sizeof(record)) == sizeof(record)) {
+            print_netstat_record(&record);
+            puts(",");
+        }
+        puts("],");
+    }
+    puts("}\n");
+
+    return 0;
+}
+
+SHELL_COMMAND(buffer_state, "Show the state of the data collection buffers", _buffer_state);
+SHELL_COMMAND(dump_buffer, "Print all the data that has been accumulated in the buffers and clear it", _dump_buffer);
