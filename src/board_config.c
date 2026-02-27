@@ -137,18 +137,20 @@ static int configure_sixlowpan(void)
     return 0;
 }
 
-static int configure_forwarding_entries(gnrc_netif_t *netif, struct forwarding_configuration *config)
+static int configure_forwarding_entries(gnrc_netif_t *netif, struct forwarding_configuration *config, unsigned int node_id)
 {
     for (unsigned i = 0; i < config->forwarding_entires_len; i++) {
         struct forwarding_entry *entry = &config->forwarding_entries[i];
-        ipv6_addr_t dest_addr = get_node_addr(entry->dest_id);
-        ipv6_addr_t next_hop_addr = generate_link_local_ipv6_addr(addr_config[entry->next_hop_id].eui_address);
-        // Currently, only add fully specified next hops and destinations, to keep things simple
-        if (gnrc_ipv6_nib_ft_add(&dest_addr, IPV6_ADDR_BIT_LEN, &next_hop_addr, netif->pid, 0) != 0) {
-            printf("Failed to add a routing table entry for dest %u, next hop %u\n", entry->dest_id, entry->next_hop_id);
-            return -1;
+        if (entry->install_id == node_id) {
+            ipv6_addr_t dest_addr = get_node_addr(entry->dest_id);
+            ipv6_addr_t next_hop_addr = generate_link_local_ipv6_addr(addr_config[entry->next_hop_id].eui_address);
+            // Currently, only add fully specified next hops and destinations, to keep things simple
+            if (gnrc_ipv6_nib_ft_add(&dest_addr, IPV6_ADDR_BIT_LEN, &next_hop_addr, netif->pid, 0) != 0) {
+                printf("Failed to add a routing table entry for dest %u, next hop %u\n", entry->dest_id, entry->next_hop_id);
+                return -1;
+            }
+            DEBUG("Added a routing table entry for dest %u, next hop %u\n", entry->dest_id, entry->next_hop_id);
         }
-        DEBUG("Added a routing table entry for dest %u, next hop %u\n", entry->dest_id, entry->next_hop_id);
     }
     return 0;
 }
@@ -166,9 +168,9 @@ struct node_configuration get_node_configuration(unsigned int node_id)
     struct node_configuration config;
     config.this_id = node_id;
     config.addr_config = addr_config[node_id];
-    config.srv6_config = srv6_config[node_id];
+    config.srv6_config = srv6_config;
     config.traffic_config = traffic_config[node_id];
-    config.forwarding_config = forwarding_config[node_id];
+    config.forwarding_config = forwarding_config;
     return config;
 }
 
@@ -186,7 +188,7 @@ int apply_node_configuration(gnrc_netif_t *netif, struct node_configuration *con
         puts("Could not apply sixlowpan confiugration completely\n");
         return -1;
     }
-    if (configure_forwarding_entries(netif, &config->forwarding_config)) {
+    if (configure_forwarding_entries(netif, &config->forwarding_config, config->this_id)) {
         puts("Could not apply forwarding confiugration completely\n");
         return -1;
     }

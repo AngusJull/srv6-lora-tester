@@ -3,17 +3,16 @@
 #include "shell.h"
 #include "tsrb.h"
 #include "ztimer.h"
-
 #include "stdio.h"
-
-#define ENABLE_DEBUG 0
-#include "debug.h"
 
 #include "netstats.h"
 #include "display.h"
 #include "stats.h"
 #include "pkt_capture.h"
 #include "sendrecv.h"
+
+#define ENABLE_DEBUG 0
+#include "debug.h"
 
 // Must be powers of two (limitation of tsrb)
 #define MAX_BYTES_NETSTAT_RECORDS (2 << 12)
