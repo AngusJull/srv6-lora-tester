@@ -78,9 +78,12 @@ int init_stats_thread(struct stats_thread_args *args);
 
 int add_record(tsrb_t *tsrb, uint8_t *record, size_t size);
 
+void print_record_json_array(tsrb_t *buffer, size_t record_len, void (*print_func)(void *, size_t));
 void print_power_record(struct power_record *record);
 void print_netstat_record(struct netstat_record *record);
 void print_capture_record(struct capture_record *record);
 void print_latency_record(struct latency_record *record);
+
+#undef GENERATE_VOID_CAST_FUNC
 
 #endif // _STATS_H_

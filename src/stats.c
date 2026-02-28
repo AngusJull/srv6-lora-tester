@@ -94,6 +94,20 @@ int add_record(tsrb_t *tsrb, uint8_t *record, size_t size)
     return tsrb_add(tsrb, record, size);
 }
 
+void print_record_json_array(tsrb_t *buffer, size_t record_len, void (*print_func)(void *, size_t))
+{
+    puts("[");
+    uint8_t record[record_len];
+    while (tsrb_get(buffer, (uint8_t *)&record, record_len)) {
+        print_func(&record, record_len);
+        // Trailing comma at end of array is not valid JSON, so make sure there's another sample first
+        if (tsrb_avail(buffer) >= sizeof(record)) {
+            puts(",");
+        }
+    }
+    puts("]");
+}
+
 void print_power_record(struct power_record *record)
 {
     printf("{\"time\":%" STAT_TIME_FMT ",\"millivolts\":%" PRIu32 "}",

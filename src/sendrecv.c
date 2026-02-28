@@ -14,7 +14,7 @@
 
 #include "sendrecv.h"
 
-#define ENABLE_DEBUG 1
+#define ENABLE_DEBUG 0
 #include "debug.h"
 
 #define SENDRECV_THREAD_PRIORITY (THREAD_PRIORITY_MAIN - 3)

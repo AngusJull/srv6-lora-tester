@@ -92,6 +92,20 @@ static int _buffer_state(int argc, char **argv)
     return 0;
 }
 
+// Define function that just checks that a void pointer has the right amount of data
+// and passes along the argument (to be able to use prints interchageably)
+#define GENERATE_VOID_CAST_FUNC(in_func, out_func, struct_name) \
+    static void out_func(void *data, size_t len)                \
+    {                                                           \
+        assert(len == sizeof(struct_name));                     \
+        in_func(data);                                          \
+    }
+
+GENERATE_VOID_CAST_FUNC(print_power_record, print_power_record_data, struct power_record)
+GENERATE_VOID_CAST_FUNC(print_netstat_record, print_netstat_record_data, struct netstat_record)
+GENERATE_VOID_CAST_FUNC(print_capture_record, print_capture_record_data, struct capture_record)
+GENERATE_VOID_CAST_FUNC(print_latency_record, print_latency_record_data, struct latency_record)
+
 static int _dump_buffer(int argc, char **argv)
 {
     // Eventually, could pass arguments to filter results
@@ -101,45 +115,21 @@ static int _dump_buffer(int argc, char **argv)
     puts("{");
     printf("\"node_id\":%u,", CONFIG_ID);
 
-    {
-        printf("\"latency_records\": [");
-        struct latency_record record;
-        while (tsrb_get(&latency_ringbuffer, (uint8_t *)&record, sizeof(record)) == sizeof(record)) {
-            print_latency_record(&record);
-            puts(",");
-        }
-        puts("],");
-    }
+    printf("\"latency_records\":");
+    print_record_json_array(&latency_ringbuffer, sizeof(struct latency_record), print_latency_record_data);
+    puts(",");
 
-    {
-        printf("\"capture_records\": [");
-        struct capture_record record;
-        while (tsrb_get(&capture_ringbuffer, (uint8_t *)&record, sizeof(record)) == sizeof(record)) {
-            print_capture_record(&record);
-            puts(",");
-        }
-        puts("],");
-    }
+    puts("\"capture_records\":");
+    print_record_json_array(&capture_ringbuffer, sizeof(struct capture_record), print_capture_record_data);
+    puts(",");
 
-    {
-        printf("\"power_records\": [");
-        struct power_record record;
-        while (tsrb_get(&power_ringbuffer, (uint8_t *)&record, sizeof(record)) == sizeof(record)) {
-            print_power_record(&record);
-            puts(",");
-        }
-        puts("],");
-    }
+    puts("\"power_records\":");
+    print_record_json_array(&power_ringbuffer, sizeof(struct power_record), print_power_record_data);
+    puts(",");
 
-    {
-        printf("\"netstat_records\": [");
-        struct netstat_record record;
-        while (tsrb_get(&netstat_ringbuffer, (uint8_t *)&record, sizeof(record)) == sizeof(record)) {
-            print_netstat_record(&record);
-            puts(",");
-        }
-        puts("],");
-    }
+    puts("\"netstat_records\":");
+    print_record_json_array(&netstat_ringbuffer, sizeof(struct netstat_record), print_netstat_record_data);
+
     puts("}\n");
 
     return 0;
