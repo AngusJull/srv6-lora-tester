@@ -26,6 +26,7 @@ FEATURES_REQUIRED += netif
 FEATURES_REQUIRED += periph_gpio
 FEATURES_REQUIRED += periph_adc
 FEATURES_REQUIRED += periph_i2c
+FEATURES_OPTIONAL += periph_rtc
 
 # use modules for networking
 
@@ -50,6 +51,12 @@ USEMODULE += gnrc_icmpv6_error
 # enable stats
 USEMODULE += netstats_l2
 USEMODULE += netstats_ipv6
+
+USEMODULE += gnrc_ipv6
+USEMODULE += gnrc_ipv6_nib
+USEMODULE += gnrc_ipv6_nib_router
+# include SRv6 processing module
+USEMODULE += gnrc_srv6_srh
 # use IEEE802154 for sx126x instead of LoRa or RAW modes
 USEMODULE += sx126x_ieee802154
 
@@ -74,7 +81,7 @@ USEMODULE += checksum
 # reduce the size of the packet buffer a bit
 # Set GNRC_PKTBUF_SIZE via CFLAGS if not being set via Kconfig.
 ifndef CONFIG_GNRC_PKTBUF_SIZE
-	CFLAGS += -DCONFIG_GNRC_PKTBUF_SIZE=512
+	CFLAGS += -DCONFIG_GNRC_PKTBUF_SIZE=2048
 endif
 
 SRC += $(wildcard src/*.c) $(wildcard src/configs/*.c)
@@ -84,6 +91,8 @@ CONFIG_ID ?= 0
 TOPOLOGY_ID ?= 0
 CFLAGS += -DCONFIG_ID=$(CONFIG_ID)
 CFLAGS += -DTOPOLOGY_ID=$(TOPOLOGY_ID)
+
+CFLAGS += -DCONFIG_GNRC_IPV6_FORWARDING=1
 
 # Must set RIOTBASE before running to the directory RIOT is in
 include $(RIOTBASE)/Makefile.include

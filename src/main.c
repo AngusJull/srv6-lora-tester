@@ -11,6 +11,7 @@
 #include "pkt_capture.h"
 #include "sendrecv.h"
 #include "stdlib.h"
+#include "srv6.h"
 
 #define ENABLE_DEBUG 0
 #include "debug.h"
@@ -35,6 +36,8 @@ static tsrb_t latency_ringbuffer;
 
 // Keep the configuration in a global so we have the option to modify it in a shell command
 static struct node_configuration config;
+
+static msg_t _main_msg_queue[MAIN_QUEUE_SIZE];
 
 static void *_shell_loop(void *ctx)
 {
@@ -63,6 +66,13 @@ int main(void)
     init_display_thread(&(struct display_thread_args){ .power_ringbuffer = &power_ringbuffer, .netstat_ringbuffer = &netstat_ringbuffer, .capture_ringbuffer = &capture_ringbuffer, .config = &config });
     init_pkt_capture_thread(&(struct pkt_capture_thread_args){ .capture_tsrb = &capture_ringbuffer });
     init_sendrecv_thread(&(struct sendrecv_thread_args){ .latency_tsrb = &latency_ringbuffer, .config = &config });
+
+    // initialize message queue for the main thread
+    msg_init_queue(_main_msg_queue, MAIN_QUEUE_SIZE);
+    gnrc_udp_init();
+
+    // init udp server for dest
+    srv6_udp_server_start();
 
     (void)puts("Threads started, running shell\n");
     _shell_loop(NULL);
@@ -155,6 +165,41 @@ static int _set_config(int argc, char **argv)
     return 0;
 }
 
+static int _srv6_ping(int argc, char **argv)
+{
+    if (argc < 3) {
+        printf("Usage: srv6_ping <destination> <segment1> [segment2 ...]\n");
+        return 1;
+    }
+
+    ipv6_addr_t dest;
+    if (ipv6_addr_from_str(&dest, argv[1]) == NULL) {
+        printf("Invalid destination address\n");
+        return 1;
+    }
+
+    int num_segments = argc - 1; // includes destination as last segment
+    if (num_segments < 1 || num_segments > 255) {
+        printf("Invalid number of segments (1-255)\n");
+        return 1;
+    }
+
+    const char *msg = "hello world";
+    gnrc_pktsnip_t *pkt = srv6_build_pkt(&dest, argv, num_segments, CLIENT_PORT, SERVER_PORT, msg, sizeof(msg));
+
+    debug_print_snip_chain("before sending packet", pkt);
+    // send packet to IPv6 layer for transmission
+    if (!gnrc_netapi_dispatch_send(GNRC_NETTYPE_IPV6, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {
+        printf("Failed to send packet\n");
+        gnrc_pktbuf_release(pkt);
+        return 1;
+    }
+
+    printf("SRv6 packet sent to %s with %d segments\n", argv[1], num_segments);
+    return 0;
+}
+
+SHELL_COMMAND(srv6_ping, "Send UDP message with SRv6 SRH", _srv6_ping);
 SHELL_COMMAND(buffer_state, "Show the state of the data collection buffers", _buffer_state);
 SHELL_COMMAND(dump_buffer, "Print all the data that has been accumulated in the buffers and clear it", _dump_buffer);
 SHELL_COMMAND(set_config, "Set the configuration information for this board", _set_config)
