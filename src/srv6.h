@@ -1,47 +1,18 @@
 #ifndef _SRV6_H_
 #define _SRV6_H_
 
-#include <stddef.h>
-#include "net/ipv6/addr.h"
-#include "net/gnrc.h"
-#include "net/gnrc/pktdump.h"
-#include "net/gnrc/pktbuf.h"
-#include "net/gnrc/netif.h"
-#include "net/ipv6/hdr.h"
-#include "net/gnrc/ipv6/hdr.h"
+#include "net/gnrc/pkt.h"
 #include "net/gnrc/srv6/srh.h"
-#include "net/gnrc/icmpv6/echo.h"
-#include "net/protnum.h"
-#include "net/gnrc/udp.h"
-#include "net/udp.h"
-#include "net/gnrc/netreg.h"
-#include "thread.h"
-
-#include <stdio.h>
-#include <string.h>
-
-#include "shell.h"
-#include "msg.h"
-
-#define MAIN_QUEUE_SIZE (8)
-
-#define BUF_SIZE 128
-#define SERVER_PORT 54321
-#define CLIENT_PORT 12345
+#include "net/ipv6/addr.h"
+#include "stddef.h"
+#include "stdio.h"
+#include "string.h"
 
 void debug_print_snip_chain(const char *msg, gnrc_pktsnip_t *pkt);
 
-void srv6_udp_server_start(void);
+gnrc_pktsnip_t *srv6_pkt_init(uint16_t src_port, uint16_t dst_port, unsigned int num_segments, const void *payload, size_t payload_len);
+void srv6_pkt_set_segment(gnrc_pktsnip_t *srv6_hdr, ipv6_addr_t *segment, unsigned int segment_num);
+gnrc_pktsnip_t *srv6_pkt_complete(gnrc_pktsnip_t *srv6_hdr, ipv6_addr_t *src);
+int srv6_pkt_send(gnrc_pktsnip_t *ip_hdr);
 
-int srv6_send_udp(ipv6_addr_t *dest, ipv6_addr_t *segments, int num_segments,
-                  uint16_t src_port, uint16_t dst_port,
-                  const void *payload, size_t payload_len);
-
-int srv6_ping_cmd(int argc, char **argv);
-
-
-gnrc_pktsnip_t *srv6_build_pkt(ipv6_addr_t *dest,
-                                char **seg_args, int num_segments,
-                                uint16_t src_port, uint16_t dst_port,
-                                const void *payload, size_t payload_len);
 #endif /* _SRV6_H_ */

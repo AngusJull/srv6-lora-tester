@@ -37,8 +37,6 @@ static tsrb_t latency_ringbuffer;
 // Keep the configuration in a global so we have the option to modify it in a shell command
 static struct node_configuration config;
 
-static msg_t _main_msg_queue[MAIN_QUEUE_SIZE];
-
 static void *_shell_loop(void *ctx)
 {
     (void)ctx;
@@ -66,13 +64,6 @@ int main(void)
     init_display_thread(&(struct display_thread_args){ .power_ringbuffer = &power_ringbuffer, .netstat_ringbuffer = &netstat_ringbuffer, .capture_ringbuffer = &capture_ringbuffer, .config = &config });
     init_pkt_capture_thread(&(struct pkt_capture_thread_args){ .capture_tsrb = &capture_ringbuffer });
     init_sendrecv_thread(&(struct sendrecv_thread_args){ .latency_tsrb = &latency_ringbuffer, .config = &config });
-
-    // initialize message queue for the main thread
-    msg_init_queue(_main_msg_queue, MAIN_QUEUE_SIZE);
-    gnrc_udp_init();
-
-    // init udp server for dest
-    srv6_udp_server_start();
 
     (void)puts("Threads started, running shell\n");
     _shell_loop(NULL);
@@ -167,33 +158,30 @@ static int _set_config(int argc, char **argv)
 
 static int _srv6_ping(int argc, char **argv)
 {
-    if (argc < 3) {
-        printf("Usage: srv6_ping <destination> <segment1> [segment2 ...]\n");
+    if (argc < 2) {
+        printf("Usage: srv6_ping <dest node_id> [segment1_node_id segment2_node_id> ...]\n");
         return 1;
     }
 
-    ipv6_addr_t dest;
-    if (ipv6_addr_from_str(&dest, argv[1]) == NULL) {
-        printf("Invalid destination address\n");
-        return 1;
-    }
+    char **segments = argv + 1;
+    unsigned int num_segments = argc - 1;
 
-    int num_segments = argc - 1; // includes destination as last segment
-    if (num_segments < 1 || num_segments > 255) {
-        printf("Invalid number of segments (1-255)\n");
-        return 1;
-    }
+    const char msg[] = "hello world";
+    unsigned int dest_id = atoi(argv[1]);
+    // Eventually should add a new udp server thread that listens for debug messages from pings like this.
+    // Currently this should send messages to the sendrecv thread, which might mess with data collection.
+    // Or, isntead of a whole new server, just add special handling to the receive func in sendrecv to print/handle packets with certain payload
+    gnrc_pktsnip_t *pkt = srv6_pkt_init(get_node_port(config.this_id, &config), get_node_port(dest_id, &config), num_segments, msg, sizeof(msg));
 
-    const char *msg = "hello world";
-    gnrc_pktsnip_t *pkt = srv6_build_pkt(&dest, argv, num_segments, CLIENT_PORT, SERVER_PORT, msg, sizeof(msg));
-
-    debug_print_snip_chain("before sending packet", pkt);
-    // send packet to IPv6 layer for transmission
-    if (!gnrc_netapi_dispatch_send(GNRC_NETTYPE_IPV6, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {
-        printf("Failed to send packet\n");
-        gnrc_pktbuf_release(pkt);
-        return 1;
+    for (unsigned int i = 0; i < num_segments; i++) {
+        unsigned int node_id = atoi(segments[i]);
+        ipv6_addr_t segment = get_node_addr(node_id, &config);
+        srv6_pkt_set_segment(pkt, &segment, i);
     }
+    ipv6_addr_t source_addr = get_node_addr(config.this_id, &config);
+    srv6_pkt_complete(pkt, &source_addr);
+
+    srv6_pkt_send(pkt);
 
     printf("SRv6 packet sent to %s with %d segments\n", argv[1], num_segments);
     return 0;
