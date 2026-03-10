@@ -2,18 +2,51 @@
 #include "net/gnrc/ipv6/nib/ft.h"
 #include "net/gnrc/netif/conf.h"
 #include "net/gnrc/sixlowpan/ctx.h"
-
-#include "current_config.h"
 #include "net/ipv6/addr.h"
 #include "net/netopt.h"
+#include "periph/flashpage.h"
+
 #include "board_config.h"
+#include "configs/topology.h"
 
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
 // Flip the flag to keep the same scope (locally assigned stays locally assigned)
-#define FLIP_EUI_LOCAL_FLAG(eui) (eui ^ 0x200000000000000)
+#define FLIP_EUI_LOCAL_FLAG(eui) ((eui) ^ 0x200000000000000)
 
+// The format to save configuration information in
+struct saved_config {
+    uint8_t config_id;
+    uint8_t chosen_topology;
+    uint8_t use_srv6;
+};
+
+// Store some configuration information in flash. This can be overwritten but should be done so sparingly.
+// We must allocate a page at a time (4096 bytes), so adding more information isn't a problem.
+// Using an array instead of the other interface for flashpage memory allows static initalization (defaults)
+FLASH_WRITABLE_INIT(saved_config_data, 1) = {
+    CONFIG_ID,
+    TOPOLOGY_ID,
+    USE_SRV6,
+};
+
+struct saved_config get_saved_configuration(void)
+{
+    // The format for the struct and the flashpage array _must_ match
+    struct saved_config config = *(struct saved_config *)saved_config_data;
+    DEBUG("Loaded configuration with fields config id %u, topology %u, use_srv6 %u", config.config_id, config.chosen_topology, config.use_srv6);
+    return config;
+}
+
+void set_saved_configuration(struct saved_config config)
+{
+    flashpage_erase(flashpage_page(saved_config_data));
+    flashpage_write((uint8_t *)saved_config_data, &config, sizeof(config));
+    DEBUG("Wrote configuration with fields config id %u, topology %u, use_srv6 %u", config.config_id, config.chosen_topology, config.use_srv6);
+}
+
+// Generate a global IPv6 address for a node based on its hardware address
 static ipv6_addr_t generate_ipv6_addr(uint64_t eui)
 {
     ipv6_addr_t addr;
@@ -26,6 +59,7 @@ static ipv6_addr_t generate_ipv6_addr(uint64_t eui)
     return addr;
 }
 
+// Generate a link local IPv6 address for a node based on its hardware address
 static ipv6_addr_t generate_link_local_ipv6_addr(uint64_t eui)
 {
     ipv6_addr_t addr;
@@ -72,6 +106,7 @@ static int configure_802154(gnrc_netif_t *netif, struct address_configuration *c
     return 0;
 }
 
+// Remove all existing IPv6 unicast addresses from an interface (to prevent any traffic from taking an unintended route)
 static void remove_all_ipv6_addrs(gnrc_netif_t *netif)
 {
     ipv6_addr_t curr_addrs[CONFIG_GNRC_NETIF_IPV6_ADDRS_NUMOF];
@@ -87,6 +122,7 @@ static void remove_all_ipv6_addrs(gnrc_netif_t *netif)
     }
 }
 
+// Perform all configuration related to the IPv6 stack
 static int configure_ipv6(gnrc_netif_t *netif, struct address_configuration *config)
 {
     // We need to remove previous IP addresses to make sure all our messages are being compressed properly
@@ -106,8 +142,8 @@ static int configure_ipv6(gnrc_netif_t *netif, struct address_configuration *con
         return -1;
     }
 
-#if ENABLE_DEBUG == 1
     // Using conditional block to use built in prints instead of messing with big endian u64s
+#if ENABLE_DEBUG == 1
     DEBUG("Configured link local address: ");
     ipv6_addr_print(&local_addr);
     DEBUG("\nConfigured long address: ");
@@ -118,6 +154,7 @@ static int configure_ipv6(gnrc_netif_t *netif, struct address_configuration *con
     return 0;
 }
 
+// Perform configuration related to the sixlowpan stack
 static int configure_sixlowpan(void)
 {
     ipv6_addr_t prefix;
@@ -137,13 +174,15 @@ static int configure_sixlowpan(void)
     return 0;
 }
 
-static int configure_forwarding_entries(gnrc_netif_t *netif, struct forwarding_configuration *config, unsigned int node_id)
+// Perform configuration related to forwarding on this node - done statically to ensure our routes for data are used
+static int configure_forwarding_entries(gnrc_netif_t *netif, struct node_configuration *config)
 {
-    for (unsigned i = 0; i < config->forwarding_entires_len; i++) {
-        struct forwarding_entry *entry = &config->forwarding_entries[i];
-        if (entry->install_id == node_id) {
-            ipv6_addr_t dest_addr = get_node_addr(entry->dest_id);
-            ipv6_addr_t next_hop_addr = generate_link_local_ipv6_addr(addr_config[entry->next_hop_id].eui_address);
+    for (unsigned i = 0; i < get_topo_forward_config(config)->forwarding_entires_len; i++) {
+        struct forwarding_entry *entry = &get_topo_forward_config(config)->forwarding_entries[i];
+        if (entry->install_id == config->this_id) {
+            ipv6_addr_t dest_addr = get_node_addr(entry->dest_id, config);
+            assert(entry->dest_id < config->topology->num_nodes);
+            ipv6_addr_t next_hop_addr = generate_link_local_ipv6_addr(config->topology->addr_configs[entry->next_hop_id].eui_address);
             // Currently, only add fully specified next hops and destinations, to keep things simple
             if (gnrc_ipv6_nib_ft_add(&dest_addr, IPV6_ADDR_BIT_LEN, &next_hop_addr, netif->pid, 0) != 0) {
                 printf("Failed to add a routing table entry for dest %u, next hop %u\n", entry->dest_id, entry->next_hop_id);
@@ -155,32 +194,29 @@ static int configure_forwarding_entries(gnrc_netif_t *netif, struct forwarding_c
     return 0;
 }
 
-unsigned int get_this_id(void)
+// Get configuration information related to a node (must be a valid node)
+struct node_configuration get_node_configuration(void)
 {
-    return CONFIG_ID;
-}
-
-struct node_configuration get_node_configuration(unsigned int node_id)
-{
+    struct saved_config loaded_config = get_saved_configuration();
     // Should never ask for an invalid node
-    assert(node_id < NUM_NODES);
     // Make copies in case we need to get these later
-    struct node_configuration config;
-    config.this_id = node_id;
-    config.addr_config = addr_config[node_id];
-    config.srv6_config = srv6_config;
-    config.traffic_config = traffic_config[node_id];
-    config.forwarding_config = forwarding_config;
-    return config;
+    struct node_configuration node_config;
+    assert(loaded_config.chosen_topology < TOPOLOGY_NUM_TOPOLOGIES);
+    node_config.topology = topology_array[loaded_config.chosen_topology];
+    assert(loaded_config.config_id < node_config.topology->num_nodes);
+    node_config.this_id = loaded_config.config_id;
+
+    return node_config;
 }
 
+// Apply all of a node's configuration (should be done first, before any applications run)
 int apply_node_configuration(gnrc_netif_t *netif, struct node_configuration *config)
 {
-    if (configure_802154(netif, &config->addr_config) < 0) {
+    if (configure_802154(netif, get_node_addr_config(config)) < 0) {
         puts("Could not apply 802.15.4 configuration completely\n");
         return -1;
     }
-    if (configure_ipv6(netif, &config->addr_config) < 0) {
+    if (configure_ipv6(netif, get_node_addr_config(config)) < 0) {
         puts("Could not apply IPv6 conifguration completely\n");
         return -1;
     }
@@ -188,22 +224,24 @@ int apply_node_configuration(gnrc_netif_t *netif, struct node_configuration *con
         puts("Could not apply sixlowpan confiugration completely\n");
         return -1;
     }
-    if (configure_forwarding_entries(netif, &config->forwarding_config, config->this_id)) {
+    if (configure_forwarding_entries(netif, config)) {
         puts("Could not apply forwarding confiugration completely\n");
         return -1;
     }
     return 0;
 }
 
-ipv6_addr_t get_node_addr(unsigned int node_id)
+// Get the global address that should be used to refer to a node when sending traffic
+ipv6_addr_t get_node_addr(unsigned int node_id, struct node_configuration *config)
 {
-    assert(node_id < NUM_NODES);
+    assert(node_id < config->topology->num_nodes);
     // Use the long address to create the IPv6 address (could try short address instead later)
-    return generate_ipv6_addr(addr_config[node_id].eui_address);
+    return generate_ipv6_addr(config->topology->addr_configs[node_id].eui_address);
 }
 
-unsigned int get_node_port(unsigned int node_id)
+// Get the port a node is reachable on
+unsigned int get_node_port(unsigned int node_id, struct node_configuration *config)
 {
-    assert(node_id < NUM_NODES);
-    return addr_config[node_id].port;
+    assert(node_id < config->topology->num_nodes);
+    return config->topology->addr_configs[node_id].port;
 }

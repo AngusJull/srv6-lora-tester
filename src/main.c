@@ -46,14 +46,12 @@ static void *_shell_loop(void *ctx)
 int main(void)
 {
     // Get the configuration for this board
-    unsigned int this_id = get_this_id();
-    config = get_node_configuration(this_id);
+    config = get_node_configuration();
     // Apply configuration
     gnrc_netif_t *radio = get_lora_netif();
     assert(radio != NULL);
     // No point continuing if we can't configure correctly
     assert(apply_node_configuration(radio, &config) == 0);
-    DEBUG("Applied configuration for node %u\n", this_id);
 
     tsrb_init(&netstat_ringbuffer, (unsigned char *)netstat_buffer, sizeof(netstat_buffer));
     tsrb_init(&power_ringbuffer, (unsigned char *)power_buffer, sizeof(power_buffer));

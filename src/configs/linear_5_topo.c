@@ -3,11 +3,7 @@
  * 0 - 1 - 2 - 3 - 4, where 0 and 4 send/recieve
 */
 
-#ifndef _TOPOLOGY_H_
-#define _TOPOLOGY_H_
-
 #include "config_common.h"
-#include "../board_config.h"
 
 #define NUM_NODES 5
 
@@ -48,11 +44,17 @@ static struct forwarding_configuration forwarding_config = {
 };
 
 static struct traffic_configuration traffic_config[NUM_NODES] = {
-    { .role = NODE_ROLE_SENDER, .use_srv6 = USE_SRV6, .dest_id = 4 },
-    { .role = NODE_ROLE_FORWARD_ONLY, .use_srv6 = USE_SRV6 },
-    { .role = NODE_ROLE_FORWARD_ONLY, .use_srv6 = USE_SRV6 },
-    { .role = NODE_ROLE_FORWARD_ONLY, .use_srv6 = USE_SRV6 },
-    { .role = NODE_ROLE_RECIEVER, .use_srv6 = USE_SRV6, .dest_id = 0 },
+    { .role = NODE_ROLE_SENDER, .dest_id = 4 },
+    { .role = NODE_ROLE_FORWARD_ONLY },
+    { .role = NODE_ROLE_FORWARD_ONLY },
+    { .role = NODE_ROLE_FORWARD_ONLY },
+    { .role = NODE_ROLE_RECIEVER, .dest_id = 0 },
 };
 
-#endif // _TOPOLOGY_H_
+struct topology_configuration linear_5_topo = {
+    .addr_configs = addr_config,
+    .traffic_configs = traffic_config,
+    .srv6_configs = &srv6_config,
+    .forwarding_configs = &forwarding_config,
+    .num_nodes = NUM_NODES,
+};

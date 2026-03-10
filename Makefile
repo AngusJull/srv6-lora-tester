@@ -4,7 +4,7 @@ APPLICATION = srv6-lora-tester
 BOARD ?= esp32-heltec-lora32-v3
 
 # This has to be the absolute path to the RIOT base directory:
-RIOTBASE ?= $(CURDIR)/../../..
+RIOTBASE ?= $(CURDIR)/../
 
 # Comment this out to disable code in RIOT that does safety checking
 # which is not needed in a production environment but helps in the
@@ -66,6 +66,10 @@ USEMODULE += ztimer
 USEMODULE += ztimer_msec
 USEMODULE += ztimer_sec
 
+# flash memory for storing configuration information
+USEMODULE += periph_flashpage
+USEMODULE += periph_flashpage_in_address_space
+
 # We use only the lower layers of the GNRC network stack, hence, we can
 # reduce the size of the packet buffer a bit
 # Set GNRC_PKTBUF_SIZE via CFLAGS if not being set via Kconfig.
@@ -73,7 +77,7 @@ ifndef CONFIG_GNRC_PKTBUF_SIZE
 	CFLAGS += -DCONFIG_GNRC_PKTBUF_SIZE=512
 endif
 
-SRC += $(wildcard src/*.c)
+SRC += $(wildcard src/*.c) $(wildcard src/configs/*.c)
 
 # Set a default board ID, for configuration, or use whatever is supplied by an env variable
 CONFIG_ID ?= 0

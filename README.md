@@ -40,4 +40,12 @@ You can then interact with the program through the shell, which runs by default.
 For example, use the command `ps` to see what processes (including network
 interfaces) are running.
 
-Later, the ability to dump the stored information as JSON output will be added
+The collected data can be displayed using the command `dump_buffer`, which will display all the information in a JSON format.
+
+## Future Work
+
+There are some remaining features and issues to be sorted out
+
+- Configuration using shell commands instead of reflashing
+- Segment routing support
+- Use real payloads for sent and received packets (CoAP for example)

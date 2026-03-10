@@ -9,11 +9,7 @@
  * Where nodes 0/2 send/recieve and nodes 1/3 send/recieve
 */
 
-#ifndef _TOPOLOGY_H_
-#define _TOPOLOGY_H_
-
 #include "config_common.h"
-#include "../board_config.h"
 
 #define NUM_NODES 6
 
@@ -55,12 +51,18 @@ static struct forwarding_configuration forwarding_config = {
 };
 
 static struct traffic_configuration traffic_config[NUM_NODES] = {
-    { .role = NODE_ROLE_SENDER, .use_srv6 = USE_SRV6, .dest_id = 2 },
-    { .role = NODE_ROLE_SENDER, .use_srv6 = USE_SRV6, .dest_id = 3 },
-    { .role = NODE_ROLE_RECIEVER, .use_srv6 = USE_SRV6, .dest_id = 0 },
-    { .role = NODE_ROLE_RECIEVER, .use_srv6 = USE_SRV6, .dest_id = 1 },
-    { .role = NODE_ROLE_FORWARD_ONLY, .use_srv6 = USE_SRV6 },
-    { .role = NODE_ROLE_FORWARD_ONLY, .use_srv6 = USE_SRV6 },
+    { .role = NODE_ROLE_SENDER, .dest_id = 2 },
+    { .role = NODE_ROLE_SENDER, .dest_id = 3 },
+    { .role = NODE_ROLE_RECIEVER, .dest_id = 0 },
+    { .role = NODE_ROLE_RECIEVER, .dest_id = 1 },
+    { .role = NODE_ROLE_FORWARD_ONLY },
+    { .role = NODE_ROLE_FORWARD_ONLY },
 };
 
-#endif // _TOPOLOGY_H_
+struct topology_configuration mesh_topo = {
+    .addr_configs = addr_config,
+    .traffic_configs = traffic_config,
+    .srv6_configs = &srv6_config,
+    .forwarding_configs = &forwarding_config,
+    .num_nodes = NUM_NODES,
+};

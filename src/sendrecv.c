@@ -72,6 +72,7 @@ int send(gnrc_netif_t *netif, ipv6_addr_t *source_addr, ipv6_addr_t *dest_addr, 
 
 void debug_print_pkt(gnrc_pktsnip_t *pkt)
 {
+    (void)pkt;
 #if ENABLE_DEBUG == 1
     gnrc_pktsnip_t *udp_hdr = pkt->next;
     udp_hdr_t *udp_header = udp_hdr->data;
@@ -145,13 +146,13 @@ static void *_sender_loop(void *ctx)
 {
     struct sendrecv_thread_args *args = ctx;
     gnrc_netif_t *radio = get_lora_netif();
-    ipv6_addr_t source_addr = get_node_addr(args->config->this_id);
-    ipv6_addr_t dest_addr = get_node_addr(args->config->traffic_config.dest_id);
-    unsigned int dest_port = get_node_port(args->config->traffic_config.dest_id);
+    ipv6_addr_t source_addr = get_node_addr(args->config->this_id, args->config);
+    ipv6_addr_t dest_addr = get_node_addr(get_node_traffic_config(args->config)->dest_id, args->config);
+    unsigned int dest_port = get_node_port(get_node_traffic_config(args->config)->dest_id, args->config);
 
     while (1) {
         ztimer_now_t start = ztimer_now(ZTIMER_MSEC);
-        send(radio, &source_addr, &dest_addr, dest_port, args->config->addr_config.port);
+        send(radio, &source_addr, &dest_addr, dest_port, get_node_addr_config(args->config)->port);
 
         DEBUG("Starting receive\n");
         gnrc_pktsnip_t *pkt = recv(SENDER_TIMEOUT_MS);
@@ -183,7 +184,7 @@ static void *_receiver_loop(void *ctx)
 {
     struct sendrecv_thread_args *args = ctx;
     gnrc_netif_t *radio = get_lora_netif();
-    ipv6_addr_t source_addr = get_node_addr(args->config->this_id);
+    ipv6_addr_t source_addr = get_node_addr(args->config->this_id, args->config);
 
     while (1) {
         DEBUG("Waiting for an incoming packet\n");
@@ -214,11 +215,11 @@ static void *_sendrecv_thread_init(void *ctx)
 
     // Set up UDP receive for both roles
     msg_init_queue(_msg_q, QUEUE_SIZE);
-    gnrc_netreg_entry_t me_reg = GNRC_NETREG_ENTRY_INIT_PID(args->config->addr_config.port,
+    gnrc_netreg_entry_t me_reg = GNRC_NETREG_ENTRY_INIT_PID(get_node_addr_config(args->config)->port,
                                                             thread_getpid());
     gnrc_netreg_register(GNRC_NETTYPE_UDP, &me_reg);
 
-    switch (args->config->traffic_config.role) {
+    switch (get_node_traffic_config(args->config)->role) {
     case NODE_ROLE_SENDER:
         return _sender_loop(args);
         break;

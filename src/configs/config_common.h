@@ -3,6 +3,8 @@
 #ifndef _CONFIG_COMMON_H_
 #define _CONFIG_COMMON_H_
 
+#include "stdint.h"
+
 // Can use compile time flag ot turn on SRv6 usage
 #ifndef USE_SRV6
 #  define USE_SRV6 0
@@ -61,5 +63,57 @@
 
 // Helper when defining configuration arrays
 #define LEN(array) sizeof(array) / sizeof(array[0])
+
+struct address_configuration {
+    unsigned int port;    // This node's UDP port
+    uint64_t eui_address; // 64 bit EUI, where the bottom 16 bits are a short address
+};
+
+struct forwarding_entry {
+    unsigned int install_id;  // The node this forwarding entry should be installed on
+    unsigned int dest_id;     // The destination for this forwarding entry
+    unsigned int next_hop_id; // The next hop towards the destination
+};
+
+struct forwarding_configuration {
+    struct forwarding_entry *forwarding_entries; // The forwarding entries to add for this node
+    unsigned int forwarding_entires_len;         // Length of the forwarding entries array
+};
+
+struct srv6_route {
+    unsigned int source_id; // Source node id for this route
+    unsigned int dest_id;   // Destination node id for this route
+    char *segments;         // Segments in this route, not including source or destination
+};
+
+struct srv6_configuration {
+    struct srv6_route *routes; // All routes for a node
+    unsigned int routes_len;   // Length of the routes array
+};
+
+enum node_role {
+    NODE_ROLE_SENDER,       // Node sends packets
+    NODE_ROLE_RECIEVER,     // Node receives and replies to packets
+    NODE_ROLE_FORWARD_ONLY, // Node does not listen for packets
+};
+
+struct traffic_configuration {
+    enum node_role role;  // The role of this node
+    unsigned int dest_id; // The id to send packets to if this node is a sender
+};
+
+struct topology_configuration {
+    struct srv6_configuration *srv6_configs;             // SRv6 configuration for certain nodes
+    struct forwarding_configuration *forwarding_configs; // Forwarding configuration for certain nodes
+    struct address_configuration *addr_configs;          // Array of length num_nodes, address configuration for each node for this topology
+    struct traffic_configuration *traffic_configs;       // Array of length num_nodes, traffic configuration for each node for this topology
+    unsigned int num_nodes;
+};
+
+struct node_configuration {
+    unsigned int this_id;
+    unsigned int use_srv6;
+    struct topology_configuration *topology;
+};
 
 #endif // _CONFIG_COMMON_H_
