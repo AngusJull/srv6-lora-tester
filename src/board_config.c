@@ -1,5 +1,4 @@
 #include "assert.h"
-#include "cpu_conf.h"
 #include "net/gnrc/ipv6/nib/ft.h"
 #include "net/gnrc/netif/conf.h"
 #include "net/gnrc/sixlowpan/ctx.h"
