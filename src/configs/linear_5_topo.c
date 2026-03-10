@@ -8,8 +8,8 @@
 #define NUM_NODES 5
 
 static struct srv6_route _routes[] = {
-    { .source_id = 0, .dest_id = 4, .segments = "" },
-    { .source_id = 4, .dest_id = 0, .segments = "" }
+    { .source_id = 0, .dest_id = 4, .segments = "1 2 3" },
+    { .source_id = 4, .dest_id = 0, .segments = "3 2 1" }
 };
 
 static struct forwarding_entry _fib[] = {
