@@ -62,7 +62,7 @@ static struct traffic_configuration traffic_config[NUM_NODES] = {
 struct topology_configuration mesh_topo = {
     .addr_configs = addr_config,
     .traffic_configs = traffic_config,
-    .srv6_configs = &srv6_config,
-    .forwarding_configs = &forwarding_config,
+    .srv6_config = &srv6_config,
+    .forwarding_config = &forwarding_config,
     .num_nodes = NUM_NODES,
 };
