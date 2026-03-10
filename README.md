@@ -46,6 +46,8 @@ The collected data can be displayed using the command `dump_buffer`, which will 
 
 There are some remaining features and issues to be sorted out
 
-- Configuration using shell commands instead of reflashing
 - Segment routing support
 - Use real payloads for sent and received packets (CoAP for example)
+- Improve display on the boards - make more descriptive
+
+This project was completed without any AI writing tools

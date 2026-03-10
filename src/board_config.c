@@ -1,10 +1,12 @@
 #include "assert.h"
+#include "cpu_conf.h"
 #include "net/gnrc/ipv6/nib/ft.h"
 #include "net/gnrc/netif/conf.h"
 #include "net/gnrc/sixlowpan/ctx.h"
 #include "net/ipv6/addr.h"
 #include "net/netopt.h"
 #include "periph/flashpage.h"
+#include "checksum/crc8.h"
 
 #include "board_config.h"
 #include "configs/topology.h"
@@ -12,39 +14,22 @@
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
+// Use page 1 instead of 0 because otherwise a flashpage macro causes clang to warn about out of bounds access
+#define FLASHPAGE                1
+
+// Use CRC parameters based on some common values. Anything should work
+#define CRC_POLY                 0x07
+#define CRC_INIT                 0x00
+
 // Flip the flag to keep the same scope (locally assigned stays locally assigned)
 #define FLIP_EUI_LOCAL_FLAG(eui) ((eui) ^ 0x200000000000000)
 
-// The format to save configuration information in
-struct saved_config {
-    uint8_t config_id;
-    uint8_t chosen_topology;
-    uint8_t use_srv6;
+// The format to save configuration information in flashpage writes must be in multiples of 4 bytes on the esp32, so align to 4 bytes
+// Include a crc to check for bad data
+struct __aligned(4) saved_config_stored {
+    struct saved_config data;
+    uint8_t crc8; // CRC for detecting if data is corrupt or missing
 };
-
-// Store some configuration information in flash. This can be overwritten but should be done so sparingly.
-// We must allocate a page at a time (4096 bytes), so adding more information isn't a problem.
-// Using an array instead of the other interface for flashpage memory allows static initalization (defaults)
-FLASH_WRITABLE_INIT(saved_config_data, 1) = {
-    CONFIG_ID,
-    TOPOLOGY_ID,
-    USE_SRV6,
-};
-
-struct saved_config get_saved_configuration(void)
-{
-    // The format for the struct and the flashpage array _must_ match
-    struct saved_config config = *(struct saved_config *)saved_config_data;
-    DEBUG("Loaded configuration with fields config id %u, topology %u, use_srv6 %u", config.config_id, config.chosen_topology, config.use_srv6);
-    return config;
-}
-
-void set_saved_configuration(struct saved_config config)
-{
-    flashpage_erase(flashpage_page(saved_config_data));
-    flashpage_write((uint8_t *)saved_config_data, &config, sizeof(config));
-    DEBUG("Wrote configuration with fields config id %u, topology %u, use_srv6 %u", config.config_id, config.chosen_topology, config.use_srv6);
-}
 
 // Generate a global IPv6 address for a node based on its hardware address
 static ipv6_addr_t generate_ipv6_addr(uint64_t eui)
@@ -244,4 +229,36 @@ unsigned int get_node_port(unsigned int node_id, struct node_configuration *conf
 {
     assert(node_id < config->topology->num_nodes);
     return config->topology->addr_configs[node_id].port;
+}
+
+static struct saved_config default_saved_config(void)
+{
+    return (struct saved_config){ .config_id = CONFIG_ID, .chosen_topology = TOPOLOGY_ID, .use_srv6 = USE_SRV6 };
+}
+
+struct saved_config get_saved_configuration(void)
+{
+    // The format for the struct and the flashpage array _must_ match
+    // For some reason it seems using a memcpy here causes the value of fields to invert upon returning. Very confusing
+    struct saved_config_stored stored_config = *(struct saved_config_stored *)flashpage_addr(FLASHPAGE);
+    unsigned int crc = crc8((uint8_t *)&stored_config.data, sizeof(stored_config.data), CRC_POLY, CRC_INIT);
+
+    struct saved_config config = stored_config.data;
+    if (crc != stored_config.crc8) {
+        DEBUG("Loaded config is invalid, providing default\n");
+        config = default_saved_config();
+        set_saved_configuration(config);
+    }
+    DEBUG("Loaded configuration with fields config id %u, topology %u, use_srv6 %u\n", config.config_id, config.chosen_topology, config.use_srv6);
+    return config;
+}
+
+void set_saved_configuration(struct saved_config config)
+{
+    struct saved_config_stored stored_config = { .data = config };
+    stored_config.crc8 = crc8((uint8_t *)&stored_config.data, sizeof(stored_config.data), CRC_POLY, CRC_INIT);
+
+    flashpage_erase(FLASHPAGE);
+    flashpage_write(flashpage_addr(FLASHPAGE), &stored_config, sizeof(stored_config));
+    DEBUG("Wrote configuration with fields config id %u, topology %u, use_srv6 %u\n", config.config_id, config.chosen_topology, config.use_srv6);
 }

@@ -10,6 +10,7 @@
 #include "stats.h"
 #include "pkt_capture.h"
 #include "sendrecv.h"
+#include "stdlib.h"
 
 #define ENABLE_DEBUG 0
 #include "debug.h"
@@ -133,5 +134,27 @@ static int _dump_buffer(int argc, char **argv)
     return 0;
 }
 
+static int _set_config(int argc, char **argv)
+{
+    if (argc != 4) {
+        puts("Set configuration for this board\n");
+        puts("Usage: set_config <config_id> <toplogy_id> <use_srv6>");
+        return 1;
+    }
+
+    struct saved_config new_config = { 0 };
+    new_config.config_id = atoi(argv[1]);
+    new_config.chosen_topology = atoi(argv[2]);
+    new_config.use_srv6 = atoi(argv[3]);
+
+    set_saved_configuration(new_config);
+
+    struct saved_config updated = get_saved_configuration();
+    printf("Updated fields are %u %u %u\n", updated.config_id, updated.chosen_topology, updated.use_srv6);
+
+    return 0;
+}
+
 SHELL_COMMAND(buffer_state, "Show the state of the data collection buffers", _buffer_state);
 SHELL_COMMAND(dump_buffer, "Print all the data that has been accumulated in the buffers and clear it", _dump_buffer);
+SHELL_COMMAND(set_config, "Set the configuration information for this board", _set_config)

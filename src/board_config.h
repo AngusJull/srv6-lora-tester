@@ -13,6 +13,13 @@
 #  define TOPOLOGY_ID 0
 #endif
 
+// Information saved on the board
+struct saved_config {
+    uint8_t config_id;
+    uint8_t chosen_topology;
+    uint8_t use_srv6;
+};
+
 // Get and apply configuration for a node
 struct node_configuration get_node_configuration(void);
 int apply_node_configuration(gnrc_netif_t *netif, struct node_configuration *config);
@@ -42,5 +49,8 @@ static inline struct srv6_configuration *get_topo_srv6_config(struct node_config
 // Helpers for quickly getting node configuration for a different node
 ipv6_addr_t get_node_addr(unsigned int node_id, struct node_configuration *config);
 unsigned int get_node_port(unsigned int node_id, struct node_configuration *config);
+
+struct saved_config get_saved_configuration(void);
+void set_saved_configuration(struct saved_config config);
 
 #endif // _BOARD_CONFIG_H_

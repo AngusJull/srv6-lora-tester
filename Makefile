@@ -68,7 +68,7 @@ USEMODULE += ztimer_sec
 
 # flash memory for storing configuration information
 USEMODULE += periph_flashpage
-USEMODULE += periph_flashpage_in_address_space
+USEMODULE += checksum
 
 # We use only the lower layers of the GNRC network stack, hence, we can
 # reduce the size of the packet buffer a bit
