@@ -8,13 +8,15 @@
 #include "net/gnrc/pktbuf.h"
 #include "net/gnrc/udp.h"
 
-#include "src/netstats.h"
-#include "stats.h"
+#include "src/board_config.h"
+#include "src/configs/config_common.h"
 #include "ztimer.h"
 
+#include "stats.h"
 #include "sendrecv.h"
+#include "srv6.h"
 
-#define ENABLE_DEBUG 0
+#define ENABLE_DEBUG 1
 #include "debug.h"
 
 #define SENDRECV_THREAD_PRIORITY (THREAD_PRIORITY_MAIN - 3)
@@ -28,44 +30,124 @@ static msg_t _msg_q[QUEUE_SIZE];
 // How many milliseconds to wait before sender assumes the receiver didn't get their message
 #define SENDER_TIMEOUT_MS 5000
 
-int send(gnrc_netif_t *netif, ipv6_addr_t *source_addr, ipv6_addr_t *dest_addr, unsigned int dest_port, unsigned int source_port)
+static gnrc_pktsnip_t *build_pkt_ipv6(unsigned int dest_id, struct node_configuration *config)
 {
-    uint32_t data = 32;
+    const char msg[] = "hello world";
 
-    gnrc_pktsnip_t *pkt = gnrc_pktbuf_add(NULL, &data, sizeof(data), GNRC_NETTYPE_UNDEF);
+    ipv6_addr_t source_addr = get_node_addr(config->this_id, config);
+    unsigned int source_port = get_node_port(config->this_id, config);
+
+    ipv6_addr_t dest_addr = get_node_addr(dest_id, config);
+    unsigned int dest_port = get_node_port(dest_id, config);
+
+    gnrc_pktsnip_t *pkt = gnrc_pktbuf_add(NULL, msg, sizeof(msg), GNRC_NETTYPE_UNDEF);
     if (pkt == NULL) {
         DEBUG("Error: unable to copy data to packet buffer\n");
-        return -1;
+        return NULL;
     }
     gnrc_pktsnip_t *udp_hdr = gnrc_udp_hdr_build(pkt, source_port, dest_port);
     if (pkt == NULL) {
         DEBUG("Error: unable to allocate UDP header\n");
         gnrc_pktbuf_release(pkt);
-        return -1;
+        return NULL;
     }
-    gnrc_pktsnip_t *ip_hdr = gnrc_ipv6_hdr_build(udp_hdr, source_addr, dest_addr);
+    gnrc_pktsnip_t *ip_hdr = gnrc_ipv6_hdr_build(udp_hdr, &source_addr, &dest_addr);
     if (ip_hdr == NULL) {
         DEBUG("Error: unable to allocate IPv6 header\n");
         gnrc_pktbuf_release(udp_hdr);
+        return NULL;
+    }
+
+    return ip_hdr;
+}
+
+static unsigned int count_segments(char *segments)
+{
+    unsigned int count = 0;
+    char *ptr = segments;
+    char *endptr = NULL;
+    while (*ptr != '\0') {
+        (void)strtol(ptr, &endptr, 10);
+        // Means no numbers left to parse
+        if (endptr == ptr) {
+            break;
+        }
+        count++;
+        // strtol sets endptr to the first char after a number (ignoring preceeding whitespace)
+        // So setting ptr to endptr will skip over previous number, or until end of string
+        ptr = endptr;
+    }
+    return count;
+}
+
+static gnrc_pktsnip_t *build_pkt_srv6(struct srv6_route *route, struct node_configuration *config)
+{
+    const char msg[] = "hello world";
+
+    unsigned int num_segments = 1 + count_segments(route->segments);
+
+    // Dest address makes at least one segment
+
+    DEBUG("Sending with %u segments\n", num_segments);
+
+    unsigned int dest_port = get_node_port(route->dest_id, config);
+    unsigned int source_port = get_node_port(config->this_id, config);
+    gnrc_pktsnip_t *pkt = srv6_pkt_init(source_port, dest_port, num_segments, msg, sizeof(msg));
+
+    unsigned int segment_num = 0;
+    char *ptr = route->segments;
+    char *endptr = NULL;
+    while (*ptr != '\0') {
+        unsigned long node_id = strtoul(ptr, &endptr, 10);
+
+        // Means no numbers left to parse
+        if (endptr == ptr) {
+            break;
+        }
+
+        DEBUG("Adding segment for node %ld\n", node_id);
+        ipv6_addr_t segment = get_node_addr(node_id, config);
+        srv6_pkt_set_segment(pkt, &segment, segment_num++);
+
+        // strtol sets endptr to the first char after a number (ignoring preceeding whitespace)
+        // So setting ptr to endptr will skip over previous number, or until end of string
+        ptr = endptr;
+    }
+
+    ipv6_addr_t dest_addr = get_node_addr(route->dest_id, config);
+    srv6_pkt_set_segment(pkt, &dest_addr, segment_num);
+
+    ipv6_addr_t source_addr = get_node_addr(config->this_id, config);
+    srv6_pkt_complete(pkt, &source_addr);
+
+    return pkt;
+}
+
+static int send(unsigned int dest_id, struct node_configuration *config)
+{
+    gnrc_pktsnip_t *pkt = NULL;
+
+    // Check if there's an appropriate route to use
+    struct srv6_route *route = get_srv6_route(config->this_id, dest_id, config);
+    if (config->use_srv6 && route) {
+        pkt = build_pkt_srv6(route, config);
+    }
+    else {
+        pkt = build_pkt_ipv6(dest_id, config);
+    }
+
+    // We were unable to build a packet
+    if (!pkt) {
         return -1;
     }
 
-    gnrc_pktsnip_t *netif_hdr = gnrc_netif_hdr_build(NULL, 0, NULL, 0);
-    if (netif_hdr == NULL) {
-        DEBUG("Unable to allocate netif header\n");
-        gnrc_pktbuf_release(ip_hdr);
-        return -1;
-    }
-
-    gnrc_netif_hdr_set_netif(netif_hdr->data, netif);
-    ip_hdr = gnrc_pkt_prepend(ip_hdr, netif_hdr);
-
-    if (!gnrc_netapi_dispatch_send(GNRC_NETTYPE_UDP, GNRC_NETREG_DEMUX_CTX_ALL, ip_hdr)) {
+    // Send, assuming the correct interface will be used
+    if (!gnrc_netapi_dispatch_send(GNRC_NETTYPE_IPV6, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {
         DEBUG("Error: unable to locate UDP thread\n");
-        gnrc_pktbuf_release(ip_hdr);
+        gnrc_pktbuf_release(pkt);
         return -1;
     }
-    DEBUG("Built and sent a packet\n");
+    DEBUG("Sent a packet\n");
 
     return 0;
 }
@@ -145,14 +227,10 @@ gnrc_pktsnip_t *recv(unsigned int timeout)
 static void *_sender_loop(void *ctx)
 {
     struct sendrecv_thread_args *args = ctx;
-    gnrc_netif_t *radio = get_lora_netif();
-    ipv6_addr_t source_addr = get_node_addr(args->config->this_id, args->config);
-    ipv6_addr_t dest_addr = get_node_addr(get_node_traffic_config(args->config)->dest_id, args->config);
-    unsigned int dest_port = get_node_port(get_node_traffic_config(args->config)->dest_id, args->config);
 
     while (1) {
         ztimer_now_t start = ztimer_now(ZTIMER_MSEC);
-        send(radio, &source_addr, &dest_addr, dest_port, get_node_addr_config(args->config)->port);
+        send(get_node_traffic_config(args->config)->dest_id, args->config);
 
         DEBUG("Starting receive\n");
         gnrc_pktsnip_t *pkt = recv(SENDER_TIMEOUT_MS);
@@ -183,8 +261,6 @@ static void *_sender_loop(void *ctx)
 static void *_receiver_loop(void *ctx)
 {
     struct sendrecv_thread_args *args = ctx;
-    gnrc_netif_t *radio = get_lora_netif();
-    ipv6_addr_t source_addr = get_node_addr(args->config->this_id, args->config);
 
     while (1) {
         DEBUG("Waiting for an incoming packet\n");
@@ -197,11 +273,19 @@ static void *_receiver_loop(void *ctx)
         udp_hdr_t *udp_header = udp_hdr->data;
         gnrc_pktsnip_t *ipv6_hdr = udp_hdr->next;
         ipv6_hdr_t *ipv6_header = ipv6_hdr->data;
+        (void)udp_header;
 
-        // We need to change the byte orders back to host order because the UDP header creation
-        // expects it that way
-        send(radio, &source_addr, &ipv6_header->src, byteorder_ntohs(udp_header->src_port), byteorder_ntohs(udp_header->dst_port));
-        DEBUG("Sent a response back");
+        // This could probably just be replaced with dest_id from traffic configuration,
+        // but because it's a more general solution to can leave it
+        int src_id = get_node_id(&ipv6_header->src, args->config);
+        if (src_id < 0) {
+            // This might happen if there are misconfigured nodes, or other traffic
+            DEBUG("Got a message from an unknown node\n");
+        }
+        else {
+            send(src_id, args->config);
+            DEBUG("Sent a response back");
+        }
         // Make sure we release the packet's data
         gnrc_pktbuf_release(pkt);
     }
