@@ -81,7 +81,9 @@ SRC += $(wildcard src/*.c) $(wildcard src/configs/*.c)
 
 # Set a default board ID, for configuration, or use whatever is supplied by an env variable
 CONFIG_ID ?= 0
+TOPOLOGY_ID ?= 0
 CFLAGS += -DCONFIG_ID=$(CONFIG_ID)
+CFLAGS += -DTOPOLOGY_ID=$(TOPOLOGY_ID)
 
 # Must set RIOTBASE before running to the directory RIOT is in
 include $(RIOTBASE)/Makefile.include
