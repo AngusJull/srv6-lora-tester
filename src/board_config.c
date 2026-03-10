@@ -188,13 +188,15 @@ static struct saved_config default_saved_config(void)
 struct node_configuration get_node_configuration(void)
 {
     struct saved_config loaded_config = get_saved_configuration();
-    // Should never ask for an invalid node
-    // Make copies in case we need to get these later
     struct node_configuration node_config;
+
     assert(loaded_config.chosen_topology < TOPOLOGY_NUM_TOPOLOGIES);
     node_config.topology = topology_array[loaded_config.chosen_topology];
+
     assert(loaded_config.config_id < node_config.topology->num_nodes);
     node_config.this_id = loaded_config.config_id;
+
+    node_config.use_srv6 = loaded_config.use_srv6;
 
     return node_config;
 }
