@@ -156,6 +156,15 @@ static int _set_config(int argc, char **argv)
     return 0;
 }
 
+static int _get_config(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    struct saved_config config = get_saved_configuration();
+    printf("Fields are %u %u %u\n", config.config_id, config.chosen_topology, config.use_srv6);
+    return 0;
+}
+
 static int _srv6_ping(int argc, char **argv)
 {
     if (argc < 2) {
@@ -191,3 +200,4 @@ SHELL_COMMAND(srv6_ping, "Send UDP message with SRv6 SRH", _srv6_ping);
 SHELL_COMMAND(buffer_state, "Show the state of the data collection buffers", _buffer_state);
 SHELL_COMMAND(dump_buffer, "Print all the data that has been accumulated in the buffers and clear it", _dump_buffer);
 SHELL_COMMAND(set_config, "Set the configuration information for this board", _set_config)
+SHELL_COMMAND(get_config, "Get the configuration information for this board", _get_config)
