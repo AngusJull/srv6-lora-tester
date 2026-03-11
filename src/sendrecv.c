@@ -4,6 +4,7 @@
 // Thread should then wait for a response. Upon receiving it, it puts some info into another TSRB and we can get that later
 
 #include "net/gnrc/ipv6/hdr.h"
+#include "net/gnrc/nettype.h"
 #include "net/gnrc/pkt.h"
 #include "net/gnrc/pktbuf.h"
 #include "net/gnrc/udp.h"
@@ -118,7 +119,10 @@ static gnrc_pktsnip_t *build_pkt_srv6(struct srv6_route *route, struct node_conf
     srv6_pkt_set_segment(pkt, &dest_addr, segment_num);
 
     ipv6_addr_t source_addr = get_node_addr(config->this_id, config);
-    srv6_pkt_complete(pkt, &source_addr);
+    // Will now include the ipv6 header on the outside
+    pkt = srv6_pkt_complete(pkt, &source_addr);
+
+    debug_print_snip_chain("", pkt);
 
     return pkt;
 }
@@ -158,30 +162,40 @@ void debug_print_pkt(gnrc_pktsnip_t *pkt)
 #if ENABLE_DEBUG == 1
     gnrc_pktsnip_t *udp_hdr = pkt->next;
     udp_hdr_t *udp_header = udp_hdr->data;
+    DEBUG("Packet UDP header src %u dst %u\n", byteorder_ntohs(udp_header->src_port), byteorder_ntohs(udp_header->dst_port));
+
     gnrc_pktsnip_t *ipv6_hdr = udp_hdr->next;
+    if (ipv6_hdr->type == GNRC_NETTYPE_IPV6_EXT) {
+        // TODO: Can add printing for segment routing header here, for now just skip
+        ipv6_hdr = ipv6_hdr->next;
+    }
+
     ipv6_hdr_t *ipv6_header = ipv6_hdr->data;
 
-    DEBUG("Packet UDP header src %u dst %u\n", byteorder_ntohs(udp_header->src_port), byteorder_ntohs(udp_header->dst_port));
     DEBUG("Packet IPv6 header src ");
     ipv6_addr_print(&ipv6_header->src);
-    DEBUG(" dst");
+    DEBUG(" dst ");
     ipv6_addr_print(&ipv6_header->dst);
+    DEBUG("\n");
 #endif
 }
 
 int is_pkt_valid(gnrc_pktsnip_t *pkt)
 {
-    gnrc_pktsnip_t *udp_hdr = pkt->next;
-    if (!(udp_hdr && udp_hdr->type == GNRC_NETTYPE_UDP)) {
-        DEBUG("Didn't get a UDP packet as expected\n");
-        return 0;
+    gnrc_pktsnip_t *next_hdr = pkt->next;
+    if (next_hdr && next_hdr->type == GNRC_NETTYPE_UDP) {
+        next_hdr = next_hdr->next;
+        if (next_hdr) {
+            if (next_hdr->type == GNRC_NETTYPE_IPV6_EXT) {
+                next_hdr = next_hdr->next;
+            }
+            if (next_hdr->type == GNRC_NETTYPE_IPV6) {
+                return 1;
+            }
+            DEBUG("Didn't get an IPv6 packet as expected\n");
+        }
     }
-    gnrc_pktsnip_t *ipv6_hdr = udp_hdr->next;
-    if (!(ipv6_hdr && ipv6_hdr->type == GNRC_NETTYPE_IPV6)) {
-        DEBUG("Didn't get an IPv6 packet as expected\n");
-        return 0;
-    }
-    return 1;
+    return 0;
 }
 
 gnrc_pktsnip_t *recv(unsigned int timeout)
@@ -272,6 +286,10 @@ static void *_receiver_loop(void *ctx)
         gnrc_pktsnip_t *udp_hdr = pkt->next;
         udp_hdr_t *udp_header = udp_hdr->data;
         gnrc_pktsnip_t *ipv6_hdr = udp_hdr->next;
+        if (ipv6_hdr->type == GNRC_NETTYPE_IPV6_EXT) {
+            // Skip the SRH for now
+            ipv6_hdr = ipv6_hdr->next;
+        }
         ipv6_hdr_t *ipv6_header = ipv6_hdr->data;
         (void)udp_header;
 
@@ -284,7 +302,7 @@ static void *_receiver_loop(void *ctx)
         }
         else {
             send(src_id, args->config);
-            DEBUG("Sent a response back");
+            DEBUG("Sent a response back\n");
         }
         // Make sure we release the packet's data
         gnrc_pktbuf_release(pkt);
