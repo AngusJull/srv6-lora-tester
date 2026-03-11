@@ -188,7 +188,8 @@ static int _srv6_ping(int argc, char **argv)
         srv6_pkt_set_segment(pkt, &segment, i);
     }
     ipv6_addr_t source_addr = get_node_addr(config.this_id, &config);
-    srv6_pkt_complete(pkt, &source_addr);
+    // Use the new IPv6 header
+    pkt = srv6_pkt_complete(pkt, &source_addr);
 
     srv6_pkt_send(pkt);
 
