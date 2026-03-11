@@ -89,8 +89,11 @@ SRC += $(wildcard src/*.c) $(wildcard src/configs/*.c)
 # Set a default board ID, for configuration, or use whatever is supplied by an env variable
 CONFIG_ID ?= 0
 TOPOLOGY_ID ?= 0
+USE_SRV6 ?= 1
+
 CFLAGS += -DCONFIG_ID=$(CONFIG_ID)
 CFLAGS += -DTOPOLOGY_ID=$(TOPOLOGY_ID)
+CFLAGS += -DUSE_SRV6=$(USE_SRV6)
 
 CFLAGS += -DCONFIG_GNRC_IPV6_FORWARDING=1
 
