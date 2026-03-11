@@ -46,6 +46,7 @@ enum capture_event_type {
 enum capture_packet_type {
     CAPTURE_PACKET_TYPE_SIXLOWPAN,
     CAPTURE_PACKET_TYPE_IPV6,
+    CAPTURE_PACKET_TYPE_SRV6,
     CAPTURE_PACKET_TYPE_UNDEF,
 };
 
@@ -56,6 +57,7 @@ struct capture_record {
     enum capture_packet_type packet_type;
     uint16_t headers_len;
     uint16_t payload_len;
+    uint8_t segments_left;
 };
 
 enum latency_record_type {

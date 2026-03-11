@@ -2,6 +2,7 @@
 #include "net/gnrc/nettype.h"
 #include "net/gnrc/pkt.h"
 #include "net/gnrc/pktbuf.h"
+#include "net/gnrc/srv6/srh.h"
 #include "net/netif.h"
 #include "src/netstats.h"
 #include "sys/errno.h"
@@ -27,6 +28,11 @@ static enum capture_packet_type packet_type(gnrc_pktsnip_t *pkt)
     case GNRC_NETTYPE_SIXLOWPAN:
         return CAPTURE_PACKET_TYPE_SIXLOWPAN;
     case GNRC_NETTYPE_IPV6:
+        if (pkt->next) {
+            if (pkt->next->type == GNRC_NETTYPE_IPV6_EXT) {
+                return CAPTURE_PACKET_TYPE_SRV6;
+            }
+        }
         return CAPTURE_PACKET_TYPE_IPV6;
     default:
         // If we expect to be receiving other packets to process, must add support
@@ -69,6 +75,18 @@ static struct capture_lengths capture_headers_len(gnrc_pktsnip_t *pkt)
     return lengths;
 }
 
+// Get the number of segments left, if this packet begins with an IPv6 header and has a segment
+// routing extension header
+static unsigned int segments_left(gnrc_pktsnip_t *pkt)
+{
+    if (pkt->next && pkt->type == GNRC_NETTYPE_IPV6_EXT) {
+        pkt = pkt->next;
+        gnrc_srv6_srh_t *srh = pkt->data;
+        return srh->seg_left;
+    }
+    return 0;
+}
+
 static void add_capture_record(tsrb_t *capture_tsrb, gnrc_pktsnip_t *pkt, enum capture_event_type type)
 {
     // Can find some examples of how to work on packets in gnrc_ipv6.c:760
@@ -79,7 +97,11 @@ static void add_capture_record(tsrb_t *capture_tsrb, gnrc_pktsnip_t *pkt, enum c
                                      .packet_type = pkt_type,
                                      .headers_len = lengths.headers_len,
                                      .payload_len = lengths.payload_len,
-                                     .time = ztimer_now(ZTIMER_MSEC) };
+                                     .time = ztimer_now(ZTIMER_MSEC),
+                                     .segments_left = 0 };
+    if (pkt_type == CAPTURE_PACKET_TYPE_SRV6) {
+        record.segments_left = segments_left(pkt);
+    }
     DEBUG("Got a packet with type %d, header length %d, payload length %d\n", pkt->type, lengths.headers_len, lengths.payload_len);
     add_record(capture_tsrb, (uint8_t *)&record, sizeof(record));
 }
