@@ -55,11 +55,12 @@ static struct capture_lengths capture_headers_len(gnrc_pktsnip_t *pkt)
             // Fall-through
         case GNRC_NETTYPE_IPV6:
             // Fall-through
+        case GNRC_NETTYPE_IPV6_EXT:
+            // Fall-through
         case GNRC_NETTYPE_SIXLOWPAN:
             lengths.headers_len += pkt->size;
             break;
         default:
-            // TODO: Add SRv6 header
             break;
         }
         // Look at the next header
@@ -92,7 +93,8 @@ static int check_pkt_netif(gnrc_pktsnip_t *pkt, int netif_pid)
         if (netif_hdr->if_pid == netif_pid) {
             return 1;
         }
-        DEBUG("Captured packet was destined for wrong interface and filtered: %d\n", netif_hdr->if_pid);
+        // Because of the WiFi interface, this message gets really annoying after a while
+        //DEBUG("Captured packet was destined for wrong interface and filtered: %d\n", netif_hdr->if_pid);
     }
     return 0;
 }

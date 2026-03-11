@@ -38,17 +38,19 @@ static inline struct traffic_configuration *get_node_traffic_config(struct node_
 
 static inline struct forwarding_configuration *get_topo_forward_config(struct node_configuration *config)
 {
-    return config->topology->forwarding_configs;
+    return config->topology->forwarding_config;
 }
 
 static inline struct srv6_configuration *get_topo_srv6_config(struct node_configuration *config)
 {
-    return config->topology->srv6_configs;
+    return config->topology->srv6_config;
 }
 
 // Helpers for quickly getting node configuration for a different node
 ipv6_addr_t get_node_addr(unsigned int node_id, struct node_configuration *config);
+int get_node_id(ipv6_addr_t *addr, struct node_configuration *config);
 unsigned int get_node_port(unsigned int node_id, struct node_configuration *config);
+struct srv6_route *get_srv6_route(unsigned int source_id, unsigned int dest_id, struct node_configuration *config);
 
 struct saved_config get_saved_configuration(void);
 void set_saved_configuration(struct saved_config config);

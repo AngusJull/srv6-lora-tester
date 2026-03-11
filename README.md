@@ -42,11 +42,21 @@ interfaces) are running.
 
 The collected data can be displayed using the command `dump_buffer`, which will display all the information in a JSON format.
 
+## Network Configurations
+
+The program includes configuration that runs to set up IPv6 addresses, IEEE 802.15.4 addresses, 6LoWPAN compression context,
+and the forwarding entires. Configurations for the network of boards are stored in topologies, and each board has an ID in
+that topology. These can be set at build time, or after flashing. To set these during compile time, use the environment variables
+`CONFIG_ID`, `TOPOLOGY_ID` and `USE_SRV6`.
+
+To update a board's configuration after flashing the board, use the command `set_config <node id> <topology id> <use srv6>`,
+where the first two arguments are IDs (you can see the behaviour of the different topologies
+in the `src/configs` folder), and the last argument is set to 0 or 1 to tell the boards to send traffic using SRv6 headers.
+
 ## Future Work
 
 There are some remaining features and issues to be sorted out
 
-- Segment routing support
 - Use real payloads for sent and received packets (CoAP for example)
 - Improve display on the boards - make more descriptive
 

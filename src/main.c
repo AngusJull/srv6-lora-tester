@@ -11,6 +11,7 @@
 #include "pkt_capture.h"
 #include "sendrecv.h"
 #include "stdlib.h"
+#include "srv6.h"
 
 #define ENABLE_DEBUG 0
 #include "debug.h"
@@ -155,6 +156,49 @@ static int _set_config(int argc, char **argv)
     return 0;
 }
 
+static int _get_config(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    struct saved_config config = get_saved_configuration();
+    printf("Fields are %u %u %u\n", config.config_id, config.chosen_topology, config.use_srv6);
+    return 0;
+}
+
+static int _srv6_ping(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("Usage: srv6_ping <dest node_id> [segment1_node_id segment2_node_id> ...]\n");
+        return 1;
+    }
+
+    char **segments = argv + 1;
+    unsigned int num_segments = argc - 1;
+
+    const char msg[] = "hello world";
+    unsigned int dest_id = atoi(argv[1]);
+    // Eventually should add a new udp server thread that listens for debug messages from pings like this.
+    // Currently this should send messages to the sendrecv thread, which might mess with data collection.
+    // Or, isntead of a whole new server, just add special handling to the receive func in sendrecv to print/handle packets with certain payload
+    gnrc_pktsnip_t *pkt = srv6_pkt_init(get_node_port(config.this_id, &config), get_node_port(dest_id, &config), num_segments, msg, sizeof(msg));
+
+    for (unsigned int i = 0; i < num_segments; i++) {
+        unsigned int node_id = atoi(segments[i]);
+        ipv6_addr_t segment = get_node_addr(node_id, &config);
+        srv6_pkt_set_segment(pkt, &segment, i);
+    }
+    ipv6_addr_t source_addr = get_node_addr(config.this_id, &config);
+    // Use the new IPv6 header
+    pkt = srv6_pkt_complete(pkt, &source_addr);
+
+    srv6_pkt_send(pkt);
+
+    printf("SRv6 packet sent to %s with %d segments\n", argv[1], num_segments);
+    return 0;
+}
+
+SHELL_COMMAND(srv6_ping, "Send UDP message with SRv6 SRH", _srv6_ping);
 SHELL_COMMAND(buffer_state, "Show the state of the data collection buffers", _buffer_state);
 SHELL_COMMAND(dump_buffer, "Print all the data that has been accumulated in the buffers and clear it", _dump_buffer);
 SHELL_COMMAND(set_config, "Set the configuration information for this board", _set_config)
+SHELL_COMMAND(get_config, "Get the configuration information for this board", _get_config)

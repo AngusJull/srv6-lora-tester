@@ -20,12 +20,12 @@
 #  define CONTEXT_ID 1
 #endif
 
-// EUI prefix, so that node short addresses can just be the last two bytes. Patten should help spot problems
+// EUI prefix, so that node short addresses can just be the last two bytes. Pattern should help spot problems
 // Keep bit 7 as 1 (locally assigned)
 #define EUI_PREFIX_48                 0xAEFEBEFECEFE0000
 
 // Generate fake EUI 64 addresses so we can statically configure the network
-#define EUI_64_ADDR(node_id)          EUI_PREFIX_48 | 0x1000 | node_id
+#define EUI_64_ADDR(node_id)          (EUI_PREFIX_48 | 0x1000 | (node_id))
 
 // Keep the bottom byte when generating a short address
 #define EUI_64_TO_SHORT_ADDR(address) (address & 0xFFFF)
@@ -103,10 +103,10 @@ struct traffic_configuration {
 };
 
 struct topology_configuration {
-    struct srv6_configuration *srv6_configs;             // SRv6 configuration for certain nodes
-    struct forwarding_configuration *forwarding_configs; // Forwarding configuration for certain nodes
-    struct address_configuration *addr_configs;          // Array of length num_nodes, address configuration for each node for this topology
-    struct traffic_configuration *traffic_configs;       // Array of length num_nodes, traffic configuration for each node for this topology
+    struct srv6_configuration *srv6_config;             // SRv6 configuration for certain nodes
+    struct forwarding_configuration *forwarding_config; // Forwarding configuration for certain nodes
+    struct address_configuration *addr_configs;         // Array of length num_nodes, address configuration for each node for this topology
+    struct traffic_configuration *traffic_configs;      // Array of length num_nodes, traffic configuration for each node for this topology
     unsigned int num_nodes;
 };
 

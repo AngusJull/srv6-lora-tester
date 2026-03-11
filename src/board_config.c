@@ -1,5 +1,4 @@
 #include "assert.h"
-#include "cpu_conf.h"
 #include "net/gnrc/ipv6/nib/ft.h"
 #include "net/gnrc/netif/conf.h"
 #include "net/gnrc/sixlowpan/ctx.h"
@@ -179,17 +178,24 @@ static int configure_forwarding_entries(gnrc_netif_t *netif, struct node_configu
     return 0;
 }
 
+static struct saved_config default_saved_config(void)
+{
+    return (struct saved_config){ .config_id = CONFIG_ID, .chosen_topology = TOPOLOGY_ID, .use_srv6 = USE_SRV6 };
+}
+
 // Get configuration information related to a node (must be a valid node)
 struct node_configuration get_node_configuration(void)
 {
     struct saved_config loaded_config = get_saved_configuration();
-    // Should never ask for an invalid node
-    // Make copies in case we need to get these later
     struct node_configuration node_config;
+
     assert(loaded_config.chosen_topology < TOPOLOGY_NUM_TOPOLOGIES);
     node_config.topology = topology_array[loaded_config.chosen_topology];
+
     assert(loaded_config.config_id < node_config.topology->num_nodes);
     node_config.this_id = loaded_config.config_id;
+
+    node_config.use_srv6 = loaded_config.use_srv6;
 
     return node_config;
 }
@@ -224,6 +230,23 @@ ipv6_addr_t get_node_addr(unsigned int node_id, struct node_configuration *confi
     return generate_ipv6_addr(config->topology->addr_configs[node_id].eui_address);
 }
 
+// Get the id of a node with a certain address, or -1 if its not a valid address for a node
+int get_node_id(ipv6_addr_t *addr, struct node_configuration *config)
+{
+    // Get eui, which should uniquely identify a node
+    uint64_t iid = byteorder_ntohll(addr->u64[1]);
+    uint64_t eui = FLIP_EUI_LOCAL_FLAG(iid);
+    // Using an XOR, we can remove all the EUI prefix bits, assuming a node id of zero does not set any bits itself
+    uint64_t node_id = EUI_64_ADDR(0) ^ eui;
+
+    // Nodes not using the correct EUI prefix, or which have an ID too high for this topology should be ignored
+    if (node_id >= config->topology->num_nodes) {
+        DEBUG("Could not turn address back into node id");
+        return -1;
+    }
+    return (int)node_id;
+}
+
 // Get the port a node is reachable on
 unsigned int get_node_port(unsigned int node_id, struct node_configuration *config)
 {
@@ -231,9 +254,15 @@ unsigned int get_node_port(unsigned int node_id, struct node_configuration *conf
     return config->topology->addr_configs[node_id].port;
 }
 
-static struct saved_config default_saved_config(void)
+struct srv6_route *get_srv6_route(unsigned int source_id, unsigned int dest_id, struct node_configuration *config)
 {
-    return (struct saved_config){ .config_id = CONFIG_ID, .chosen_topology = TOPOLOGY_ID, .use_srv6 = USE_SRV6 };
+    struct srv6_configuration *srv6_config = config->topology->srv6_config;
+    for (unsigned int i = 0; i < srv6_config->routes_len; i++) {
+        if (srv6_config->routes[i].source_id == source_id && srv6_config->routes[i].dest_id == dest_id) {
+            return &srv6_config->routes[i];
+        }
+    }
+    return NULL;
 }
 
 struct saved_config get_saved_configuration(void)
