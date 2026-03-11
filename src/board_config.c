@@ -192,7 +192,10 @@ struct node_configuration get_node_configuration(void)
     assert(loaded_config.chosen_topology < TOPOLOGY_NUM_TOPOLOGIES);
     node_config.topology = topology_array[loaded_config.chosen_topology];
 
-    assert(loaded_config.config_id < node_config.topology->num_nodes);
+    if (loaded_config.config_id >= node_config.topology->num_nodes) {
+        DEBUG("Config ID (%d) does not match topology. Reverting to default ID\n", loaded_config.config_id);
+        loaded_config.config_id = 0;
+    }
     node_config.this_id = loaded_config.config_id;
 
     node_config.use_srv6 = loaded_config.use_srv6;
