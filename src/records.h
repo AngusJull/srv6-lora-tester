@@ -4,7 +4,6 @@
 #include "mutex.h"
 #include "stdint.h"
 #include "inttypes.h"
-#include "tsrb.h"
 
 typedef uint32_t stat_time_t;
 
@@ -89,8 +88,6 @@ struct latency_record {
     stat_time_t round_trip_time;
 };
 
-int add_record(tsrb_t *tsrb, uint8_t *record, size_t size);
-
 void dl_list_init(struct dl_list *list);
 int dl_list_add(struct dl_list *list, uint8_t *data, size_t data_len);
 void dl_list_iter(struct dl_list *list, int (*func)(uint8_t *data, size_t data_len, void *ctx), void *ctx);
@@ -98,7 +95,6 @@ size_t dl_list_first(struct dl_list *list, uint8_t *data, size_t data_len);
 unsigned int dl_list_count(struct dl_list *list);
 int dl_list_clear(struct dl_list *list);
 
-void print_record_json_array(tsrb_t *buffer, size_t record_len, void (*print_func)(void *, size_t));
 void print_record_list_json_array(struct dl_list *list, void (*print_func)(void *, size_t));
 void print_power_record(struct power_record *record);
 void print_netstat_record(struct netstat_record *record);

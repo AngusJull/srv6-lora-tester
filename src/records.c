@@ -19,6 +19,7 @@ int dl_list_add(struct dl_list *list, uint8_t *data, size_t data_len)
     // Just put the data immediately after the struct
     struct dl_item *new = malloc(sizeof(*new) + data_len);
     if (new == NULL) {
+        printf("ERROR: Could not allocate memory for new record, discarding\n");
         return -1;
     }
     memset(new, 0, sizeof(*new));
@@ -107,31 +108,6 @@ int dl_list_clear(struct dl_list *list)
     mutex_unlock(&list->mutex);
 
     return 0;
-}
-
-int add_record(tsrb_t *tsrb, uint8_t *record, size_t size)
-{
-    // Overwrite oldest value
-    if (tsrb_free(tsrb) < size) {
-        // Must drop whole records so we don't corrupt data
-        tsrb_drop(tsrb, size);
-        // Assume this completed successfully, but if it doesn't should just be unable to add
-    }
-    return tsrb_add(tsrb, record, size);
-}
-
-void print_record_json_array(tsrb_t *buffer, size_t record_len, void (*print_func)(void *, size_t))
-{
-    puts("[");
-    uint8_t record[record_len];
-    while (tsrb_get(buffer, (uint8_t *)&record, record_len)) {
-        print_func(&record, record_len);
-        // Trailing comma at end of array is not valid JSON, so make sure there's another sample first
-        if (tsrb_avail(buffer) >= sizeof(record)) {
-            puts(",");
-        }
-    }
-    puts("]");
 }
 
 struct print_record_list_json_array_inner_ctx {

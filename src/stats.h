@@ -2,11 +2,12 @@
 #define _STATS_H_
 
 #include "net/gnrc/netif.h"
-#include "tsrb.h"
+
+#include "records.h"
 
 struct stats_thread_args {
-    tsrb_t *power_tsrb;
-    tsrb_t *netstat_tsrb;
+    struct dl_list *power_list;
+    struct dl_list *netstat_list;
 };
 
 gnrc_netif_t *get_lora_netif(void);

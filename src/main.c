@@ -16,18 +16,8 @@
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
-// Must be powers of two (limitation of tsrb)
-#define MAX_BYTES_NETSTAT_RECORDS (2 << 12)
-#define MAX_BYTES_POWER_RECORDS   (2 << 12)
-
-// Allocate statically, so that we don't need to use a memory allocator/linked list
-static uint8_t netstat_buffer[MAX_BYTES_NETSTAT_RECORDS];
-static uint8_t power_buffer[MAX_BYTES_POWER_RECORDS];
-
-// use thread safe buffers for inter-thread communication and data storage
-static tsrb_t netstat_ringbuffer;
-static tsrb_t power_ringbuffer;
-
+static struct dl_list netstat_list;
+static struct dl_list power_list;
 static struct dl_list capture_list;
 static struct dl_list latency_list;
 
@@ -52,13 +42,13 @@ int main(void)
     // No point continuing if we can't configure correctly
     assert(apply_node_configuration(radio, &config) == 0);
 
-    tsrb_init(&netstat_ringbuffer, (unsigned char *)netstat_buffer, sizeof(netstat_buffer));
-    tsrb_init(&power_ringbuffer, (unsigned char *)power_buffer, sizeof(power_buffer));
+    dl_list_init(&netstat_list);
+    dl_list_init(&power_list);
     dl_list_init(&capture_list);
     dl_list_init(&latency_list);
 
-    init_stats_thread(&(struct stats_thread_args){ .power_tsrb = &power_ringbuffer, .netstat_tsrb = &netstat_ringbuffer });
-    init_display_thread(&(struct display_thread_args){ .power_ringbuffer = &power_ringbuffer, .netstat_ringbuffer = &netstat_ringbuffer, .capture_list = &capture_list, .config = &config });
+    init_stats_thread(&(struct stats_thread_args){ .power_list = &power_list, .netstat_list = &netstat_list });
+    init_display_thread(&(struct display_thread_args){ .power_list = &power_list, .netstat_list = &netstat_list, .capture_list = &capture_list, .config = &config });
     init_pkt_capture_thread(&(struct pkt_capture_thread_args){ .capture_list = &capture_list });
     init_sendrecv_thread(&(struct sendrecv_thread_args){ .latency_list = &latency_list, .config = &config });
 
@@ -73,8 +63,8 @@ static int _buffer_state(int argc, char **argv)
     (void)argc;
     (void)argv;
 
-    unsigned power_count = tsrb_avail(&power_ringbuffer);
-    unsigned netstat_count = tsrb_avail(&netstat_ringbuffer);
+    unsigned power_count = dl_list_count(&power_list);
+    unsigned netstat_count = dl_list_count(&netstat_list);
     unsigned capture_count = dl_list_count(&capture_list);
     unsigned latency_count = dl_list_count(&latency_list);
 
@@ -121,11 +111,11 @@ static int _dump_buffer(int argc, char **argv)
     puts(",");
 
     puts("\"power_records\":");
-    print_record_json_array(&power_ringbuffer, sizeof(struct power_record), print_power_record_data);
+    print_record_list_json_array(&power_list, print_power_record_data);
     puts(",");
 
     puts("\"netstat_records\":");
-    print_record_json_array(&netstat_ringbuffer, sizeof(struct netstat_record), print_netstat_record_data);
+    print_record_list_json_array(&netstat_list, print_netstat_record_data);
 
     puts("}\n");
 
