@@ -5,7 +5,7 @@ import datetime
 import json
 
 DATA_END_SEQUENCE = "}\n"
-RETREIVAL_COMMAND = "dump_buffer"
+RETREIVAL_COMMAND = "print_records"
 
 
 def collect(port):

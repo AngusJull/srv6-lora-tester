@@ -93,7 +93,7 @@ GENERATE_VOID_CAST_FUNC(print_netstat_record, print_netstat_record_data, struct 
 GENERATE_VOID_CAST_FUNC(print_capture_record, print_capture_record_data, struct capture_record)
 GENERATE_VOID_CAST_FUNC(print_latency_record, print_latency_record_data, struct latency_record)
 
-static int _dump_buffer(int argc, char **argv)
+static int _print_records(int argc, char **argv)
 {
     // Eventually, could pass arguments to filter results
     (void)argc;
@@ -118,6 +118,20 @@ static int _dump_buffer(int argc, char **argv)
     print_record_list_json_array(&netstat_list, print_netstat_record_data);
 
     puts("}\n");
+
+    return 0;
+}
+
+static int _clear_records(int argc, char **argv)
+{
+    // Eventually, could pass arguments to filter results
+    (void)argc;
+    (void)argv;
+
+    dl_list_clear(&latency_list);
+    dl_list_clear(&power_list);
+    dl_list_clear(&capture_list);
+    dl_list_clear(&netstat_list);
 
     return 0;
 }
@@ -186,6 +200,7 @@ static int _srv6_ping(int argc, char **argv)
 
 SHELL_COMMAND(srv6_ping, "Send UDP message with SRv6 SRH", _srv6_ping);
 SHELL_COMMAND(buffer_state, "Show the state of the data collection buffers", _buffer_state);
-SHELL_COMMAND(dump_buffer, "Print all the data that has been accumulated in the buffers and clear it", _dump_buffer);
+SHELL_COMMAND(print_records, "Print all the data that has been accumulated in the collection buffers", _print_records);
+SHELL_COMMAND(clear_records, "Clear all the data in the collection", _clear_records);
 SHELL_COMMAND(set_config, "Set the configuration information for this board", _set_config)
 SHELL_COMMAND(get_config, "Get the configuration information for this board", _get_config)
