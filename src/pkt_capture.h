@@ -1,10 +1,10 @@
 #ifndef _PKT_CAPTURE_H_
 #define _PKT_CAPTURE_H_
 
-#include "tsrb.h"
+#include "records.h"
 
 struct pkt_capture_thread_args {
-    tsrb_t *capture_tsrb;
+    struct dl_list *capture_list;
 };
 
 void init_pkt_capture_thread(struct pkt_capture_thread_args *args);

@@ -8,6 +8,7 @@
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
+#include "configs/config_common.h"
 #include "records.h"
 #include "display.h"
 
@@ -141,9 +142,10 @@ static void *_display_loop(void *ctx)
     struct capture_record capture = { 0 };
 
     while (1) {
+        // By not handling empty case - either print zeroed capture or keep whatever we had last
         peek_tsrb_head(args->power_ringbuffer, (uint8_t *)&power, sizeof(power));
         peek_tsrb_head(args->netstat_ringbuffer, (uint8_t *)&netstat, sizeof(netstat));
-        peek_tsrb_head(args->capture_ringbuffer, (uint8_t *)&capture, sizeof(capture));
+        dl_list_first(args->capture_list, (uint8_t *)&capture, sizeof(capture));
 
         int display_route_notif = 0;
         ztimer_now_t time = ztimer_now(ZTIMER_MSEC);
