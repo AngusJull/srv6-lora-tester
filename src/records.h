@@ -1,6 +1,7 @@
 #ifndef _RECORDS_H_
 #define _RECORDS_H_
 
+#include "mutex.h"
 #include "stdint.h"
 #include "inttypes.h"
 #include "tsrb.h"
@@ -10,6 +11,21 @@ typedef uint32_t stat_time_t;
 #ifndef STAT_TIME_FMT
 #  define STAT_TIME_FMT PRIu32
 #endif
+
+// Doubly linked list element
+// Using void pointer instead of something type safe because dealing with container_of and thread safety
+// gets to be really cumbersome and hard to make a good interface for
+struct dl_item {
+    void *record;
+    struct dl_item *next;
+    struct dl_item *prev;
+};
+
+// Linked list with mutex to provide thread safety
+struct dl_list {
+    mutex_t mutex;
+    struct dl_item *head;
+};
 
 struct power_record {
     stat_time_t time;
@@ -73,6 +89,12 @@ struct latency_record {
 };
 
 int add_record(tsrb_t *tsrb, uint8_t *record, size_t size);
+
+void list_init(struct dl_list *list);
+int list_add(struct dl_list *list, uint8_t *data, size_t data_len);
+void list_iter(struct dl_list *list, int (*func)(void *record, void *ctx), void *ctx);
+int list_clear(struct dl_list *list);
+
 void print_record_json_array(tsrb_t *buffer, size_t record_len, void (*print_func)(void *, size_t));
 void print_power_record(struct power_record *record);
 void print_netstat_record(struct netstat_record *record);
