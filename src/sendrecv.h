@@ -1,11 +1,10 @@
 #ifndef _SENDRECV_H_
 #define _SENDRECV_H_
 
-#include "tsrb.h"
-#include "board_config.h"
+#include "records.h"
 
 struct sendrecv_thread_args {
-    tsrb_t *latency_tsrb;
+    struct dl_list *latency_list;
     struct node_configuration *config;
 };
 

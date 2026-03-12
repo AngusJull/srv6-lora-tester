@@ -252,7 +252,7 @@ static void *_sender_loop(void *ctx)
             DEBUG("No response, timed out\n");
             ztimer_now_t end = ztimer_now(ZTIMER_MSEC);
             struct latency_record latency = { .time = end, .type = LATENCY_RECORD_TYPE_NOT_RECEIVED, .round_trip_time = end - start };
-            add_record(args->latency_tsrb, (unsigned char *)&latency, sizeof(latency));
+            dl_list_add(args->latency_list, (unsigned char *)&latency, sizeof(latency));
             continue;
         }
 
@@ -265,7 +265,7 @@ static void *_sender_loop(void *ctx)
         ztimer_now_t end = ztimer_now(ZTIMER_MSEC);
         ztimer_now_t round_trip = end - start;
         struct latency_record latency = { .time = end, .type = LATENCY_RECORD_TYPE_NOMINAL, .round_trip_time = round_trip };
-        add_record(args->latency_tsrb, (unsigned char *)&latency, sizeof(latency));
+        dl_list_add(args->latency_list, (unsigned char *)&latency, sizeof(latency));
         DEBUG("Added a latency record with round trip time %" PRIu32 " ms\n", round_trip);
         ztimer_sleep(ZTIMER_MSEC, 1000);
     }
