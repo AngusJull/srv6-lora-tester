@@ -21,14 +21,18 @@ int dl_list_add(struct dl_list *list, uint8_t *data, size_t data_len)
     if (new == NULL) {
         return -1;
     }
+    memset(new, 0, sizeof(*new));
 
     // Copy data into record, which has memory allocated right after new
     new->record = new + 1;
+    new->record_len = data_len;
     memcpy(new->record, data, data_len);
 
     // Only lock when we're totally ready to put in the list
     mutex_lock(&list->mutex);
+
     DL_PREPEND(list->head, new);
+
     mutex_unlock(&list->mutex);
 
     return 0;
@@ -37,19 +41,41 @@ int dl_list_add(struct dl_list *list, uint8_t *data, size_t data_len)
 // The provided function is called with the given context and the record pointer for each element
 // Iteration stops if the provided function returns 0
 // In the future, this could be extended to provide a way to remove the current element if needed
-void dl_list_iter(struct dl_list *list, int (*func)(void *record, void *ctx), void *ctx)
+void dl_list_iter(struct dl_list *list, int (*func)(uint8_t *data, size_t data_len, void *ctx), void *ctx)
 {
     mutex_lock(&list->mutex);
 
     struct dl_item *item;
     DL_FOREACH(list->head, item)
     {
-        if (func(item->record, ctx) == 0) {
+        if (func(item->record, item->record_len, ctx) == 0) {
             break;
         }
     }
 
     mutex_unlock(&list->mutex);
+}
+
+// Copy out the first item in the linked list and return record_len, or return 0
+// record_len MUST be the same size as every item put into the list
+size_t dl_list_first(struct dl_list *list, uint8_t *data, size_t data_len)
+{
+    size_t ret = 0;
+
+    mutex_lock(&list->mutex);
+
+    if (list->head != NULL) {
+        size_t copy_len = data_len;
+        if (list->head->record_len < data_len) {
+            copy_len = list->head->record_len;
+        }
+        memcpy(data, list->head->record, copy_len);
+        ret = copy_len;
+    }
+
+    mutex_unlock(&list->mutex);
+
+    return ret;
 }
 
 unsigned int dl_list_count(struct dl_list *list)
@@ -77,6 +103,7 @@ int dl_list_clear(struct dl_list *list)
         // Because we used just one malloc for the list item and data, can do a single free here too
         free(item);
     }
+
     mutex_unlock(&list->mutex);
 
     return 0;
@@ -110,10 +137,9 @@ void print_record_json_array(tsrb_t *buffer, size_t record_len, void (*print_fun
 struct print_record_list_json_array_inner_ctx {
     unsigned int index;
     void (*print_func)(void *, size_t);
-    size_t record_size;
 };
 
-static int _print_record_list_json_array_inner(void *data, void *ctx)
+static int _print_record_list_json_array_inner(uint8_t *data, size_t data_len, void *ctx)
 {
     struct print_record_list_json_array_inner_ctx *args = ctx;
 
@@ -122,15 +148,15 @@ static int _print_record_list_json_array_inner(void *data, void *ctx)
         puts(",");
     }
     args->index++;
-    args->print_func(data, args->record_size);
+    args->print_func(data, data_len);
 
     return 1;
 }
 
-void print_record_list_json_array(struct dl_list *list, size_t record_len, void (*print_func)(void *, size_t))
+void print_record_list_json_array(struct dl_list *list, void (*print_func)(void *, size_t))
 {
     puts("[");
-    struct print_record_list_json_array_inner_ctx args = { .index = 0, .print_func = print_func, .record_size = record_len };
+    struct print_record_list_json_array_inner_ctx args = { .index = 0, .print_func = print_func };
     dl_list_iter(list, _print_record_list_json_array_inner, &args);
     puts("]");
 }

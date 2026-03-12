@@ -19,18 +19,16 @@
 // Must be powers of two (limitation of tsrb)
 #define MAX_BYTES_NETSTAT_RECORDS (2 << 12)
 #define MAX_BYTES_POWER_RECORDS   (2 << 12)
-#define MAX_BYTES_CAPTURE_RECORDS (2 << 10)
 
 // Allocate statically, so that we don't need to use a memory allocator/linked list
 static uint8_t netstat_buffer[MAX_BYTES_NETSTAT_RECORDS];
 static uint8_t power_buffer[MAX_BYTES_POWER_RECORDS];
-static uint8_t capture_buffer[MAX_BYTES_CAPTURE_RECORDS];
 
 // use thread safe buffers for inter-thread communication and data storage
 static tsrb_t netstat_ringbuffer;
 static tsrb_t power_ringbuffer;
-static tsrb_t capture_ringbuffer;
 
+static struct dl_list capture_list;
 static struct dl_list latency_list;
 
 // Keep the configuration in a global so we have the option to modify it in a shell command
@@ -56,12 +54,12 @@ int main(void)
 
     tsrb_init(&netstat_ringbuffer, (unsigned char *)netstat_buffer, sizeof(netstat_buffer));
     tsrb_init(&power_ringbuffer, (unsigned char *)power_buffer, sizeof(power_buffer));
-    tsrb_init(&capture_ringbuffer, (unsigned char *)capture_buffer, sizeof(capture_buffer));
+    dl_list_init(&capture_list);
     dl_list_init(&latency_list);
 
     init_stats_thread(&(struct stats_thread_args){ .power_tsrb = &power_ringbuffer, .netstat_tsrb = &netstat_ringbuffer });
-    init_display_thread(&(struct display_thread_args){ .power_ringbuffer = &power_ringbuffer, .netstat_ringbuffer = &netstat_ringbuffer, .capture_ringbuffer = &capture_ringbuffer, .config = &config });
-    init_pkt_capture_thread(&(struct pkt_capture_thread_args){ .capture_tsrb = &capture_ringbuffer });
+    init_display_thread(&(struct display_thread_args){ .power_ringbuffer = &power_ringbuffer, .netstat_ringbuffer = &netstat_ringbuffer, .capture_list = &capture_list, .config = &config });
+    init_pkt_capture_thread(&(struct pkt_capture_thread_args){ .capture_list = &capture_list });
     init_sendrecv_thread(&(struct sendrecv_thread_args){ .latency_list = &latency_list, .config = &config });
 
     (void)puts("Threads started, running shell\n");
@@ -77,7 +75,7 @@ static int _buffer_state(int argc, char **argv)
 
     unsigned power_count = tsrb_avail(&power_ringbuffer);
     unsigned netstat_count = tsrb_avail(&netstat_ringbuffer);
-    unsigned capture_count = tsrb_avail(&capture_ringbuffer);
+    unsigned capture_count = dl_list_count(&capture_list);
     unsigned latency_count = dl_list_count(&latency_list);
 
     printf("Netstat bytes/count: %u/%u, Power bytes/count: %u/%u, Capture bytes/count: %u/%u, Latency bytes/count: %u/%u\n",
@@ -115,11 +113,11 @@ static int _dump_buffer(int argc, char **argv)
     printf("\"node_id\":%u,", CONFIG_ID);
 
     printf("\"latency_records\":");
-    print_record_list_json_array(&latency_list, sizeof(struct latency_record), print_latency_record_data);
+    print_record_list_json_array(&latency_list, print_latency_record_data);
     puts(",");
 
     puts("\"capture_records\":");
-    print_record_json_array(&capture_ringbuffer, sizeof(struct capture_record), print_capture_record_data);
+    print_record_list_json_array(&capture_list, print_capture_record_data);
     puts(",");
 
     puts("\"power_records\":");
