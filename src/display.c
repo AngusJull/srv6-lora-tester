@@ -8,7 +8,7 @@
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
-#include "stats.h"
+#include "records.h"
 #include "display.h"
 
 #define S_TO_MS                 1000

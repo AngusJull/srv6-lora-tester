@@ -5,7 +5,7 @@
 #include "ztimer.h"
 #include "stdio.h"
 
-#include "netstats.h"
+#include "records.h"
 #include "display.h"
 #include "stats.h"
 #include "pkt_capture.h"

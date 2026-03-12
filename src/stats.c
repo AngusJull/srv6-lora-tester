@@ -1,9 +1,8 @@
 #include "net/netif.h"
-#include "net/netstats.h"
-#include "netstats.h"
-#include "battery.h"
 #include "ztimer.h"
 
+#include "battery.h"
+#include "records.h"
 #include "stats.h"
 
 #define ENABLE_DEBUG 0
@@ -15,6 +14,15 @@
 #define THREAD_PRIORITY_MED   (THREAD_PRIORITY_MAIN + 1)
 // Stack for the stats thread
 static char _stack[THREAD_STACKSIZE_MEDIUM];
+
+static void print_netif_name(netif_t *netif)
+{
+    static char name[CONFIG_NETIF_NAMELENMAX] = "None";
+    if (netif != NULL) {
+        netif_get_name(netif, name);
+    }
+    printf("Radio name: %s\n", name);
+}
 
 static void copy_netstat_to_record(netstats_t *from, enum netstat_type type, struct netstat_record *dest)
 {
@@ -33,7 +41,7 @@ static void copy_netstat_to_record(netstats_t *from, enum netstat_type type, str
 static int collect_netstats(netif_t *netif, unsigned int type, tsrb_t *dest)
 {
     netstats_t stats;
-    if (get_stats(netif, type, &stats) < 0) {
+    if (netif_get_opt(netif, NETOPT_STATS, type, &stats, sizeof(stats)) < 0) {
         DEBUG("Could not read stats\n");
     }
     else {
@@ -83,82 +91,9 @@ static void *_stats_loop(void *ctx)
     return NULL;
 }
 
-int add_record(tsrb_t *tsrb, uint8_t *record, size_t size)
+gnrc_netif_t *get_lora_netif(void)
 {
-    // Overwrite oldest value
-    if (tsrb_free(tsrb) < size) {
-        // Must drop whole records so we don't corrupt data
-        tsrb_drop(tsrb, size);
-        // Assume this completed successfully, but if it doesn't should just be unable to add
-    }
-    return tsrb_add(tsrb, record, size);
-}
-
-void print_record_json_array(tsrb_t *buffer, size_t record_len, void (*print_func)(void *, size_t))
-{
-    puts("[");
-    uint8_t record[record_len];
-    while (tsrb_get(buffer, (uint8_t *)&record, record_len)) {
-        print_func(&record, record_len);
-        // Trailing comma at end of array is not valid JSON, so make sure there's another sample first
-        if (tsrb_avail(buffer) >= sizeof(record)) {
-            puts(",");
-        }
-    }
-    puts("]");
-}
-
-void print_power_record(struct power_record *record)
-{
-    printf("{\"time\":%" STAT_TIME_FMT ",\"millivolts\":%" PRIu32 "}",
-           record->time,
-           record->millivolts);
-}
-
-void print_netstat_record(struct netstat_record *record)
-{
-    printf("{\"time\":%" STAT_TIME_FMT
-           ",\"type\":%d"
-           ",\"tx_unicast_count\":%" PRIu32
-           ",\"tx_mcast_count\":%" PRIu32
-           ",\"tx_success\":%" PRIu32
-           ",\"tx_failed\":%" PRIu32
-           ",\"tx_bytes\":%" PRIu32
-           ",\"rx_count\":%" PRIu32
-           ",\"rx_bytes\":%" PRIu32 "}",
-           record->time,
-           record->type,
-           record->tx_unicast_count,
-           record->tx_mcast_count,
-           record->tx_success,
-           record->tx_failed,
-           record->tx_bytes,
-           record->rx_count,
-           record->rx_bytes);
-}
-
-void print_capture_record(struct capture_record *record)
-{
-    printf("{\"time\":%" STAT_TIME_FMT
-           ",\"event_type\":%d"
-           ",\"packet_type\":%d"
-           ",\"headers_len\":%" PRIu16
-           ",\"payload_len\":%" PRIu16 "}",
-           record->time,
-           record->event_type,
-           record->packet_type,
-           record->headers_len,
-           record->payload_len);
-}
-
-void print_latency_record(struct latency_record *record)
-{
-    printf("{\"time\":%" STAT_TIME_FMT
-           ",\"type\":%d"
-           ",\"round_trip_time\":%" STAT_TIME_FMT "}",
-           record->time,
-           record->type,
-           record->round_trip_time);
+    return gnrc_netif_get_by_type(NETDEV_SX126X, NETDEV_INDEX_ANY);
 }
 
 // Start collecting stats

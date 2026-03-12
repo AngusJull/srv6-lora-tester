@@ -3,8 +3,6 @@
 #include "net/gnrc/pkt.h"
 #include "net/gnrc/pktbuf.h"
 #include "net/gnrc/srv6/srh.h"
-#include "net/netif.h"
-#include "src/netstats.h"
 #include "sys/errno.h"
 #include "net/gnrc/netapi.h"
 #include "net/gnrc/netreg.h"
@@ -14,6 +12,7 @@
 #include "debug.h"
 
 #include "stats.h"
+#include "records.h"
 #include "pkt_capture.h"
 
 #define PKT_CAPTURE_THREAD_PRIORITY (THREAD_PRIORITY_MAIN - 4)

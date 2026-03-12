@@ -13,7 +13,7 @@
 #include "src/configs/config_common.h"
 #include "ztimer.h"
 
-#include "stats.h"
+#include "records.h"
 #include "sendrecv.h"
 #include "srv6.h"
 
