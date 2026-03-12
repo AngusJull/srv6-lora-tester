@@ -78,7 +78,7 @@ static void *_stats_loop(void *ctx)
             collect_netstats(&radio_netif->netif, NETSTATS_IPV6, args->netstat_tsrb);
         }
         DEBUG("Stats sleeping\n");
-        ztimer_sleep(ZTIMER_MSEC, S_TO_MS);
+        ztimer_sleep(ZTIMER_MSEC, S_TO_MS * 5);
     }
     return NULL;
 }

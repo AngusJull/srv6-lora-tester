@@ -25,8 +25,8 @@ extern struct topology_configuration star_topo;
 
 static struct topology_configuration *topology_array[TOPOLOGY_NUM_TOPOLOGIES] = {
     [TOPOLOGY_LINEAR_2] = &linear_2_topo,
-    [TOPOLOGY_LINEAR_5] = &linear_5_topo,
     [TOPOLOGY_LINEAR_3] = &linear_3_topo,
+    [TOPOLOGY_LINEAR_5] = &linear_5_topo,
     [TOPOLOGY_MESH] = &mesh_topo,
     [TOPOLOGY_STAR] = &star_topo,
 };
