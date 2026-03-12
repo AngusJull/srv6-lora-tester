@@ -2,18 +2,19 @@
 #include "stdio.h"
 #include "string.h"
 #include "utlist.h"
+#include <sys/_types.h>
 
 #include "records.h"
 
 // Initalize a new list with no elements
-void list_init(struct dl_list *list)
+void dl_list_init(struct dl_list *list)
 {
     list->head = NULL;
     mutex_init(&list->mutex);
 }
 
 // Add an element to the list by allocating a new element and copying some data into it
-int list_add(struct dl_list *list, uint8_t *data, size_t data_len)
+int dl_list_add(struct dl_list *list, uint8_t *data, size_t data_len)
 {
     // Just put the data immediately after the struct
     struct dl_item *new = malloc(sizeof(*new) + data_len);
@@ -36,7 +37,7 @@ int list_add(struct dl_list *list, uint8_t *data, size_t data_len)
 // The provided function is called with the given context and the record pointer for each element
 // Iteration stops if the provided function returns 0
 // In the future, this could be extended to provide a way to remove the current element if needed
-void list_iter(struct dl_list *list, int (*func)(void *record, void *ctx), void *ctx)
+void dl_list_iter(struct dl_list *list, int (*func)(void *record, void *ctx), void *ctx)
 {
     mutex_lock(&list->mutex);
 
@@ -44,14 +45,26 @@ void list_iter(struct dl_list *list, int (*func)(void *record, void *ctx), void 
     DL_FOREACH(list->head, item)
     {
         if (func(item->record, ctx) == 0) {
-            return;
+            break;
         }
     }
 
     mutex_unlock(&list->mutex);
 }
 
-int list_clear(struct dl_list *list)
+unsigned int dl_list_count(struct dl_list *list)
+{
+    mutex_lock(&list->mutex);
+
+    struct dl_item *item;
+    unsigned int count = 0;
+    DL_COUNT(list->head, item, count);
+
+    mutex_unlock(&list->mutex);
+
+    return count;
+}
+int dl_list_clear(struct dl_list *list)
 {
     mutex_lock(&list->mutex);
 
@@ -91,6 +104,34 @@ void print_record_json_array(tsrb_t *buffer, size_t record_len, void (*print_fun
             puts(",");
         }
     }
+    puts("]");
+}
+
+struct print_record_list_json_array_inner_ctx {
+    unsigned int index;
+    void (*print_func)(void *, size_t);
+    size_t record_size;
+};
+
+static int _print_record_list_json_array_inner(void *data, void *ctx)
+{
+    struct print_record_list_json_array_inner_ctx *args = ctx;
+
+    // Prevent trailing comma that is invalid JSON
+    if (args->index > 0) {
+        puts(",");
+    }
+    args->index++;
+    args->print_func(data, args->record_size);
+
+    return 1;
+}
+
+void print_record_list_json_array(struct dl_list *list, size_t record_len, void (*print_func)(void *, size_t))
+{
+    puts("[");
+    struct print_record_list_json_array_inner_ctx args = { .index = 0, .print_func = print_func, .record_size = record_len };
+    dl_list_iter(list, _print_record_list_json_array_inner, &args);
     puts("]");
 }
 
