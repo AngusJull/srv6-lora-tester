@@ -141,21 +141,49 @@ static int _clear_records(int argc, char **argv)
 
 static int _set_config(int argc, char **argv)
 {
-    if (argc != 4) {
+    if (argc < 2) {
         puts("Set configuration for this board\n");
-        puts("Usage: set_config <config_id> <toplogy_id> <use_srv6>");
+        puts("Usage: set_config [id <config_id>] [topo <toplogy_id>] [sr <use_srv6>] [tp <throughput_test>]");
         return 1;
     }
 
-    struct saved_config new_config = { 0 };
-    new_config.config_id = atoi(argv[1]);
-    new_config.chosen_topology = atoi(argv[2]);
-    new_config.use_srv6 = atoi(argv[3]);
+    struct saved_config new_config = get_saved_configuration();
+
+    for (int arg = 0; arg < argc; arg++) {
+        if (strcmp(argv[arg], "id") == 0) {
+            arg++;
+            if (arg < argc) {
+                // If argument is invalid, gets set to zero. Fine for now
+                new_config.config_id = strtol(argv[arg], NULL, 10);
+            }
+        }
+        if (strcmp(argv[arg], "topo") == 0) {
+            arg++;
+            if (arg < argc) {
+                // If argument is invalid, gets set to zero. Fine for now
+                new_config.chosen_topology = strtol(argv[arg], NULL, 10);
+            }
+        }
+        if (strcmp(argv[arg], "sr") == 0) {
+            arg++;
+            if (arg < argc) {
+                // If argument is invalid, gets set to zero. Fine for now
+                new_config.use_srv6 = strtol(argv[arg], NULL, 10);
+            }
+        }
+        if (strcmp(argv[arg], "tp") == 0) {
+            arg++;
+            if (arg < argc) {
+                // If argument is invalid, gets set to zero. Fine for now
+                new_config.throughput_test = strtol(argv[arg], NULL, 10);
+            }
+        }
+    }
 
     set_saved_configuration(new_config);
 
     struct saved_config updated = get_saved_configuration();
-    printf("Updated fields are %u %u %u\n", updated.config_id, updated.chosen_topology, updated.use_srv6);
+    printf("Updated fields are id %u topo %u use_srv6 %u throughput_test %u\n", updated.config_id, updated.chosen_topology, updated.use_srv6, updated.throughput_test);
 
     return 0;
 }
@@ -165,7 +193,7 @@ static int _get_config(int argc, char **argv)
     (void)argc;
     (void)argv;
     struct saved_config config = get_saved_configuration();
-    printf("Fields are %u %u %u\n", config.config_id, config.chosen_topology, config.use_srv6);
+    printf("Fields are id %u topo %u use_srv6 %u throughput_test %u\n", config.config_id, config.chosen_topology, config.use_srv6, config.throughput_test);
     return 0;
 }
 
