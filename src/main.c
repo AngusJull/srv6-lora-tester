@@ -16,6 +16,16 @@
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
+#define MAX_NUM_NETSTAT 1024
+#define MAX_NUM_POWER   512
+#define MAX_NUM_CAPTURE 4096
+#define MAX_NUM_LATENCY 2048
+
+uint8_t netstat_list_backing[MAX_NUM_NETSTAT * sizeof(struct netstat_record)];
+uint8_t power_list_backing[MAX_NUM_POWER * sizeof(struct power_record)];
+uint8_t capture_list_backing[MAX_NUM_CAPTURE * sizeof(struct capture_record)];
+uint8_t latency_list_backing[MAX_NUM_LATENCY * sizeof(struct latency_record)];
+
 static struct record_list netstat_list;
 static struct record_list power_list;
 static struct record_list capture_list;
@@ -42,10 +52,10 @@ int main(void)
     // No point continuing if we can't configure correctly
     assert(apply_node_configuration(radio, &config) == 0);
 
-    record_list_init(&netstat_list, sizeof(struct netstat_record));
-    record_list_init(&power_list, sizeof(struct power_record));
-    record_list_init(&capture_list, sizeof(struct capture_record));
-    record_list_init(&latency_list, sizeof(struct latency_record));
+    record_list_init(&netstat_list, netstat_list_backing, sizeof(netstat_list_backing), sizeof(struct netstat_record));
+    record_list_init(&power_list, power_list_backing, sizeof(power_list_backing), sizeof(struct power_record));
+    record_list_init(&capture_list, capture_list_backing, sizeof(capture_list_backing), sizeof(struct capture_record));
+    record_list_init(&latency_list, latency_list_backing, sizeof(latency_list_backing), sizeof(struct latency_record));
 
     init_stats_thread(&(struct stats_thread_args){ .power_list = &power_list, .netstat_list = &netstat_list });
     init_display_thread(&(struct display_thread_args){ .power_list = &power_list, .netstat_list = &netstat_list, .capture_list = &capture_list, .config = &config });

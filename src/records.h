@@ -58,10 +58,10 @@ enum capture_packet_type {
 // Stats for received and sent packets
 struct capture_record {
     stat_time_t time;
-    enum capture_event_type event_type;
-    enum capture_packet_type packet_type;
     uint16_t headers_len;
     uint16_t payload_len;
+    uint8_t event_type;
+    uint8_t packet_type;
     uint8_t segments_left;
 };
 
@@ -72,12 +72,20 @@ enum latency_record_type {
 
 struct latency_record {
     stat_time_t time;
-    enum latency_record_type type;
     stat_time_t round_trip_time;
+    uint8_t type;
 };
 
-void record_list_init(struct record_list *list, unsigned int record_size);
-int record_list_resize(struct record_list *list, unsigned int capacity);
+// Record list, implementing the very basics of a vector, pretty much
+struct record_list {
+    mutex_t mutex;
+    uint8_t *backing;
+    unsigned int len;
+    unsigned int capacity;
+    size_t record_size;
+};
+
+void record_list_init(struct record_list *list, uint8_t *backing, unsigned int backing_size, unsigned int record_size);
 int record_list_insert(struct record_list *list, uint8_t *record, size_t record_size);
 void record_list_iter(struct record_list *list, int (*func)(uint8_t *record, size_t record_size, void *ctx), void *ctx);
 int record_list_first(struct record_list *list, uint8_t *record, size_t record_size);

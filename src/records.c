@@ -9,50 +9,18 @@
 
 #define RECORD_LIST_INIT_CAPACITY 4
 
-// Resize the list, but don't lock the mutex. Mutex MUST be locked already
-// Doesn't look like RIOT checks owner of mutex when locking
-static int _record_list_resize(struct record_list *list, unsigned int capacity)
-{
-    // If capacity is zero, elements must already be free
-    if (capacity == 0 && list->capacity == 0) {
-        return 0;
-    }
-
-    uint8_t *new_elements = realloc(list->elements, list->record_size * capacity);
-    if (new_elements) {
-        list->elements = new_elements;
-        list->capacity = capacity;
-        DEBUG("Resized list to %u elements, %u bytes\n", capacity, capacity * list->record_size);
-        return 0;
-    }
-    printf("Failed to allocate new memory!\n");
-    return 1;
-}
-
 // Initalize a new list with no elements
-void record_list_init(struct record_list *list, unsigned int record_size)
+void record_list_init(struct record_list *list, uint8_t *backing, unsigned int backing_size, unsigned int record_size)
 {
     mutex_init(&list->mutex);
     mutex_lock(&list->mutex);
 
     list->record_size = record_size;
-    list->capacity = 0;
     list->len = 0;
-    _record_list_resize(list, RECORD_LIST_INIT_CAPACITY);
+    list->capacity = backing_size / record_size;
+    list->backing = backing;
 
     mutex_unlock(&list->mutex);
-}
-
-// Resize the list to store capacity elements
-int record_list_resize(struct record_list *list, unsigned int capacity)
-{
-    mutex_lock(&list->mutex);
-
-    int ret = _record_list_resize(list, capacity);
-
-    mutex_unlock(&list->mutex);
-
-    return ret;
 }
 
 // Add an element to the front of the list by allocating a new element and copying some data into it
@@ -64,14 +32,14 @@ int record_list_insert(struct record_list *list, uint8_t *record, size_t record_
     int ret = 0;
     mutex_lock(&list->mutex);
 
-    // If we end up out of space, allocate more
-    if (list->len >= list->capacity && _record_list_resize(list, list->capacity * 2)) {
+    // If we end up out of space, just ignore. Silent so we can still get information off the boards
+    if (list->len >= list->capacity) {
         ret = 1;
     }
     else {
         // Actually put the element on the end, but consistently use the list as if it goes
         // on the front so just use that terminology
-        memcpy(&list->elements[list->len * list->record_size], record, record_size);
+        memcpy(&list->backing[list->len * list->record_size], record, record_size);
         list->len++;
     }
 
@@ -90,7 +58,7 @@ void record_list_iter(struct record_list *list, int (*func)(uint8_t *record, siz
     // Iterate backwards so we see the newest element first and oldest element last,
     // since all other operations start at the end or modify the end
     for (unsigned int i = list->len; i-- > 0;) {
-        if (func(&list->elements[i * list->record_size], list->record_size, ctx)) {
+        if (func(&list->backing[i * list->record_size], list->record_size, ctx)) {
             break;
         }
     }
@@ -107,7 +75,7 @@ int record_list_first(struct record_list *list, uint8_t *record, size_t record_s
     mutex_lock(&list->mutex);
 
     if (list->len) {
-        memcpy(record, &list->elements[(list->len - 1) * list->record_size], record_size);
+        memcpy(record, &list->backing[(list->len - 1) * list->record_size], record_size);
     }
     else {
         ret = 1;
@@ -137,7 +105,6 @@ int record_list_clear(struct record_list *list)
     mutex_lock(&list->mutex);
 
     list->len = 0;
-    _record_list_resize(list, RECORD_LIST_INIT_CAPACITY);
 
     mutex_unlock(&list->mutex);
 
