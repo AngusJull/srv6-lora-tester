@@ -58,6 +58,28 @@ def collect(port):
     return json_data
 
 
+def config_changes(port):
+    print("Change board configuration:")
+    print("Change id: id <id>")
+    print("Change topology: topo <id>")
+    print("Enable/disable srv6: sr <id>")
+    print("Enable/disable throughput test: tp <id>")
+    print("Enter these on one line seperated by spaces, or nothing for no changes")
+    changes = input("> ")
+
+    if len(changes) != 0:
+        conn = serial.Serial(port, 115200, timeout=0.1)
+        print("Serial connection opened")
+        time.sleep(0.1)
+
+        conn.reset_output_buffer()
+        conn.write(f"set_config {changes}\n".encode())
+        print(f"Response: {conn.read_until('>\n'.encode())}")
+        return True
+
+    return False
+
+
 def persist_data(data, filename):
     with open(filename, "w+") as file:
         json.dump(data, file)
@@ -78,6 +100,10 @@ def run_collection():
         collected_data.append(collect(args.port))
         persist_data(collected_data, args.file)
         print("Saved data to file")
+
+        while config_changes(args.port):
+            pass
+
         _ = input("Press enter when ready for next board")
 
 
