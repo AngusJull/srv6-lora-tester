@@ -111,11 +111,16 @@ static int check_pkt_netif(gnrc_pktsnip_t *pkt, int netif_pid)
     // It seems like all IPv6 and sixlowpan packets start with a netif header to describe their destination
     if (pkt->type == GNRC_NETTYPE_NETIF) {
         gnrc_netif_hdr_t *netif_hdr = pkt->data;
+
+        // Remove all broadcast and multicast packets
+        if (netif_hdr->flags &
+            (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)) {
+            return 0;
+        }
+        // Only allow packets destined for our radio
         if (netif_hdr->if_pid == netif_pid) {
             return 1;
         }
-        // Because of the WiFi interface, this message gets really annoying after a while
-        //DEBUG("Captured packet was destined for wrong interface and filtered: %d\n", netif_hdr->if_pid);
     }
     return 0;
 }
