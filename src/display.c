@@ -11,30 +11,31 @@
 #include "records.h"
 #include "display.h"
 
-#define S_TO_MS                 1000
+#define TIME_BETWEEN_DRAW_MS       200
+#define MAX_TIME_SINCE_CAPTURED_MS 2000
 
-#define DISPLAY_DEACTIVATE_PIN  GPIO_PIN(0, 36) // OLED Power Control
-#define DISPLAY_RST_PIN         GPIO_PIN(0, 21) // OLED Reset
+#define DISPLAY_DEACTIVATE_PIN     GPIO_PIN(0, 36) // OLED Power Control
+#define DISPLAY_RST_PIN            GPIO_PIN(0, 21) // OLED Reset
 
-#define DISPLAY_I2C             0    // I2C Line, could be made into a
-#define DISPLAY_I2C_ADDR        0x3c // I2C Address
+#define DISPLAY_I2C                0    // I2C Line, could be made into a
+#define DISPLAY_I2C_ADDR           0x3c // I2C Address
 
 // Maximum character widths for integers
-#define MAX_STRLEN              30
-#define MAX_BAT_WIDTH           4 // Maximum value for battery, to prevent using more than four chars
-#define MAX_ID_WIDTH            2
-#define MAX_BYTE_WIDTH          5
-#define MAX_COUNT_WIDTH         3
+#define MAX_STRLEN                 30
+#define MAX_BAT_WIDTH              4 // Maximum value for battery, to prevent using more than four chars
+#define MAX_ID_WIDTH               2
+#define MAX_BYTE_WIDTH             5
+#define MAX_COUNT_WIDTH            5
 
 // Allow integer widths to be used in string formatting
-#define _STRINGIFY(x)           #x
+#define _STRINGIFY(x)              #x
 // Force expansion of the enclosed macro
-#define STR(macro)              _STRINGIFY(macro)
+#define STR(macro)                 _STRINGIFY(macro)
 
-#define DEFAULT_PAD_X           3
-#define DEFAULT_PAD_Y           3
+#define DEFAULT_PAD_X              3
+#define DEFAULT_PAD_Y              3
 
-#define DISPLAY_THREAD_PRIORITY (THREAD_PRIORITY_MAIN - 1)
+#define DISPLAY_THREAD_PRIORITY    (THREAD_PRIORITY_MAIN - 1)
 static char _stack[THREAD_STACKSIZE_MEDIUM];
 
 static u8g2_t u8g2;
@@ -96,13 +97,8 @@ void draw_display(unsigned int battery_mv, int display_route_notif, unsigned int
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "STATS");
         next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
 
-        snprintf(text_buffer, sizeof(text_buffer), "TX SUCC:%u FAIL:%u",
-                 clamp_width(main_stats->tx_success, MAX_COUNT_WIDTH),
-                 clamp_width(main_stats->tx_failed, MAX_COUNT_WIDTH));
-        cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer);
-        next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
-
-        snprintf(text_buffer, sizeof(text_buffer), "RX:%u",
+        snprintf(text_buffer, sizeof(text_buffer), "TX %u RX %u",
+                 clamp_width(main_stats->tx_unicast_count, MAX_COUNT_WIDTH),
                  clamp_width(main_stats->rx_count, MAX_COUNT_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer);
         next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
@@ -127,14 +123,14 @@ static void *_display_loop(void *ctx)
 
         int display_route_notif = 0;
         ztimer_now_t time = ztimer_now(ZTIMER_MSEC);
-        if (time - capture.time < S_TO_MS * 2) {
+        if (time - capture.time < MAX_TIME_SINCE_CAPTURED_MS) {
             display_route_notif = 1;
         }
 
         draw_display(power.millivolts, display_route_notif, args->config->this_id, &netstat);
         // 4Hz refresh rate to not use up too much battery life, hopefully
         DEBUG("Display sleeping\n");
-        ztimer_sleep(ZTIMER_MSEC, 200);
+        ztimer_sleep(ZTIMER_MSEC, TIME_BETWEEN_DRAW_MS);
     }
     return NULL;
 }
