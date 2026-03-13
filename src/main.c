@@ -68,11 +68,11 @@ static int _buffer_state(int argc, char **argv)
     unsigned capture_count = dl_list_count(&capture_list);
     unsigned latency_count = dl_list_count(&latency_list);
 
-    printf("Netstat bytes/count: %u/%u, Power bytes/count: %u/%u, Capture bytes/count: %u/%u, Latency bytes/count: %u/%u\n",
-           netstat_count, netstat_count / sizeof(struct netstat_record),
-           power_count, power_count / sizeof(struct power_record),
-           capture_count, capture_count / sizeof(struct capture_record),
-           latency_count, latency_count / sizeof(struct latency_record));
+    printf("Count/Bytes: Netstat: %u/%u, Power: %u/%u, Capture: %u/%u, Latency: %u/%u\n",
+           netstat_count, netstat_count * sizeof(struct netstat_record),
+           power_count, power_count * sizeof(struct power_record),
+           capture_count, capture_count * sizeof(struct capture_record),
+           latency_count, latency_count * sizeof(struct latency_record));
 
     unsigned int current_time = ztimer_now(ZTIMER_MSEC);
     printf("Current time is %u\n", current_time);
@@ -100,7 +100,10 @@ static int _print_records(int argc, char **argv)
     (void)argv;
 
     puts("{");
-    printf("\"node_id\":%u,", CONFIG_ID);
+    printf("\"node_id\":%u,", config.this_id);
+    printf("\"topology_id\":%u,", config.topology_id);
+    printf("\"use_srv6\":%u,", config.use_srv6);
+    printf("\"throughput_test\":%u,", config.throughput_test);
 
     printf("\"latency_records\":");
     print_record_list_json_array(&latency_list, print_latency_record_data);
