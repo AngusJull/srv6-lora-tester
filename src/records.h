@@ -11,36 +11,19 @@ typedef uint32_t stat_time_t;
 #  define STAT_TIME_FMT PRIu32
 #endif
 
-// Record list, implementing the very basics of a vector, pretty much
-struct record_list {
-    mutex_t mutex;
-    uint8_t *elements;
-    unsigned int len;
-    unsigned int capacity;
-    size_t record_size;
-};
-
-struct power_record {
-    stat_time_t time;
-    uint32_t millivolts;
-};
-
-enum netstat_type {
-    NETSTATS_RECORD_TYPE_ALL,
-    NETSTATS_RECORD_TYPE_IPV6,
-    NETSTATS_RECORD_TYPE_L2,
-};
-
-// Stats for L2 or L3
-struct netstat_record {
-    enum netstat_type type;
-    stat_time_t time;
-
-    // netstats come with other fields that don't seem to be used properly by the board
-    uint32_t tx_unicast_count;
+struct netstats {
     uint32_t tx_bytes;
-    uint32_t rx_count;
     uint32_t rx_bytes;
+    uint16_t tx_unicast_count;
+    uint16_t rx_count;
+};
+
+struct stats_record {
+    stat_time_t time;
+    struct netstats l2;
+    struct netstats l3;
+    // netstats come with other fields that don't seem to be used properly by the board
+    uint16_t millivolts;
 };
 
 enum capture_event_type {
@@ -93,8 +76,7 @@ unsigned int record_list_len(struct record_list *list);
 int record_list_clear(struct record_list *list);
 
 void print_record_list_json_array(struct record_list *list, void (*print_func)(void *, size_t));
-void print_power_record(struct power_record *record);
-void print_netstat_record(struct netstat_record *record);
+void print_stats_record(struct stats_record *record);
 void print_capture_record(struct capture_record *record);
 void print_latency_record(struct latency_record *record);
 

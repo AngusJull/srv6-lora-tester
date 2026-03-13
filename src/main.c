@@ -1,7 +1,5 @@
 #include "board_config.h"
-#include "net/gnrc/nettype.h"
 #include "shell.h"
-#include "tsrb.h"
 #include "ztimer.h"
 #include "stdio.h"
 
@@ -16,18 +14,15 @@
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
-#define MAX_NUM_NETSTAT 1024
-#define MAX_NUM_POWER   512
-#define MAX_NUM_CAPTURE 4096
-#define MAX_NUM_LATENCY 2048
+#define MAX_NUM_STATS   1800
+#define MAX_NUM_CAPTURE 7200
+#define MAX_NUM_LATENCY 3600
 
-uint8_t netstat_list_backing[MAX_NUM_NETSTAT * sizeof(struct netstat_record)];
-uint8_t power_list_backing[MAX_NUM_POWER * sizeof(struct power_record)];
+uint8_t stats_list_backing[MAX_NUM_STATS * sizeof(struct stats_record)];
 uint8_t capture_list_backing[MAX_NUM_CAPTURE * sizeof(struct capture_record)];
 uint8_t latency_list_backing[MAX_NUM_LATENCY * sizeof(struct latency_record)];
 
-static struct record_list netstat_list;
-static struct record_list power_list;
+static struct record_list stats_list;
 static struct record_list capture_list;
 static struct record_list latency_list;
 
@@ -52,13 +47,12 @@ int main(void)
     // No point continuing if we can't configure correctly
     assert(apply_node_configuration(radio, &config) == 0);
 
-    record_list_init(&netstat_list, netstat_list_backing, sizeof(netstat_list_backing), sizeof(struct netstat_record));
-    record_list_init(&power_list, power_list_backing, sizeof(power_list_backing), sizeof(struct power_record));
+    record_list_init(&stats_list, stats_list_backing, sizeof(stats_list_backing), sizeof(struct stats_record));
     record_list_init(&capture_list, capture_list_backing, sizeof(capture_list_backing), sizeof(struct capture_record));
     record_list_init(&latency_list, latency_list_backing, sizeof(latency_list_backing), sizeof(struct latency_record));
 
-    init_stats_thread(&(struct stats_thread_args){ .power_list = &power_list, .netstat_list = &netstat_list });
-    init_display_thread(&(struct display_thread_args){ .power_list = &power_list, .netstat_list = &netstat_list, .capture_list = &capture_list, .config = &config });
+    init_stats_thread(&(struct stats_thread_args){ .stats_list = &stats_list });
+    init_display_thread(&(struct display_thread_args){ .stats_list = &stats_list, .capture_list = &capture_list, .config = &config });
     init_pkt_capture_thread(&(struct pkt_capture_thread_args){ .capture_list = &capture_list });
     init_sendrecv_thread(&(struct sendrecv_thread_args){ .latency_list = &latency_list, .config = &config });
 
@@ -73,14 +67,12 @@ static int _buffer_state(int argc, char **argv)
     (void)argc;
     (void)argv;
 
-    unsigned power_count = record_list_len(&power_list);
-    unsigned netstat_count = record_list_len(&netstat_list);
+    unsigned stats_count = record_list_len(&stats_list);
     unsigned capture_count = record_list_len(&capture_list);
     unsigned latency_count = record_list_len(&latency_list);
 
-    printf("Count/Bytes: Netstat: %u/%u, Power: %u/%u, Capture: %u/%u, Latency: %u/%u\n",
-           netstat_count, netstat_count * sizeof(struct netstat_record),
-           power_count, power_count * sizeof(struct power_record),
+    printf("Count/Bytes: Stats: %u/%u, Capture: %u/%u, Latency: %u/%u\n",
+           stats_count, stats_count * sizeof(struct stats_record),
            capture_count, capture_count * sizeof(struct capture_record),
            latency_count, latency_count * sizeof(struct latency_record));
 
@@ -98,8 +90,7 @@ static int _buffer_state(int argc, char **argv)
         in_func(data);                                          \
     }
 
-GENERATE_VOID_CAST_FUNC(print_power_record, print_power_record_data, struct power_record)
-GENERATE_VOID_CAST_FUNC(print_netstat_record, print_netstat_record_data, struct netstat_record)
+GENERATE_VOID_CAST_FUNC(print_stats_record, print_netstat_record_data, struct stats_record)
 GENERATE_VOID_CAST_FUNC(print_capture_record, print_capture_record_data, struct capture_record)
 GENERATE_VOID_CAST_FUNC(print_latency_record, print_latency_record_data, struct latency_record)
 
@@ -123,12 +114,8 @@ static int _print_records(int argc, char **argv)
     print_record_list_json_array(&capture_list, print_capture_record_data);
     puts(",");
 
-    puts("\"power_records\":");
-    print_record_list_json_array(&power_list, print_power_record_data);
-    puts(",");
-
-    puts("\"netstat_records\":");
-    print_record_list_json_array(&netstat_list, print_netstat_record_data);
+    puts("\"stats_records\":");
+    print_record_list_json_array(&stats_list, print_netstat_record_data);
 
     puts("}\n");
 
@@ -142,9 +129,8 @@ static int _clear_records(int argc, char **argv)
     (void)argv;
 
     record_list_clear(&latency_list);
-    record_list_clear(&power_list);
     record_list_clear(&capture_list);
-    record_list_clear(&netstat_list);
+    record_list_clear(&stats_list);
 
     return 0;
 }

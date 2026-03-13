@@ -6,8 +6,7 @@
 #include "records.h"
 
 struct stats_thread_args {
-    struct record_list *power_list;
-    struct record_list *netstat_list;
+    struct record_list *stats_list;
 };
 
 gnrc_netif_t *get_lora_netif(void);

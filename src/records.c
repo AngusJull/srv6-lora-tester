@@ -138,27 +138,26 @@ void print_record_list_json_array(struct record_list *list, void (*print_func)(v
     puts("]");
 }
 
-void print_power_record(struct power_record *record)
+static void print_netstats(struct netstats *stats)
 {
-    printf("{\"time\":%" STAT_TIME_FMT ",\"millivolts\":%" PRIu32 "}",
-           record->time,
-           record->millivolts);
+    printf("{\"tx_unicast_count\":%" PRIu16
+           ",\"tx_bytes\":%" PRIu32
+           ",\"rx_count\":%" PRIu16
+           ",\"rx_bytes\":%" PRIu32 "}",
+           stats->tx_unicast_count,
+           stats->tx_bytes,
+           stats->rx_count,
+           stats->rx_bytes);
 }
 
-void print_netstat_record(struct netstat_record *record)
+void print_stats_record(struct stats_record *record)
 {
-    printf("{\"time\":%" STAT_TIME_FMT
-           ",\"type\":%d"
-           ",\"tx_unicast_count\":%" PRIu32
-           ",\"tx_bytes\":%" PRIu32
-           ",\"rx_count\":%" PRIu32
-           ",\"rx_bytes\":%" PRIu32 "}",
-           record->time,
-           record->type,
-           record->tx_unicast_count,
-           record->tx_bytes,
-           record->rx_count,
-           record->rx_bytes);
+    printf("{\"time\":%" STAT_TIME_FMT ",\"millivolts\":%" PRIu16, record->time, record->millivolts);
+    puts(",l2: ");
+    print_netstats(&record->l2);
+    puts(",l3: ");
+    print_netstats(&record->l3);
+    puts("}");
 }
 
 void print_capture_record(struct capture_record *record)

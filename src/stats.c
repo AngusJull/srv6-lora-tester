@@ -24,41 +24,22 @@ static void print_netif_name(netif_t *netif)
     printf("Radio name: %s\n", name);
 }
 
-static void copy_netstat_to_record(netstats_t *from, enum netstat_type type, struct netstat_record *dest)
+static void copy_netstat_to_record(netstats_t *from, struct netstats *dest)
 {
     dest->rx_bytes = from->rx_bytes;
     dest->tx_bytes = from->tx_bytes;
     dest->tx_unicast_count = from->tx_unicast_count;
     dest->rx_count = from->rx_count;
-    dest->type = type;
-    // Must use the same clock as other uses of ztimer_now
-    dest->time = ztimer_now(ZTIMER_MSEC);
 }
 
-static int collect_netstats(netif_t *netif, unsigned int type, struct record_list *list)
+static int collect_netstats(netif_t *netif, unsigned int type, struct netstats *dest)
 {
     netstats_t stats;
     if (netif_get_opt(netif, NETOPT_STATS, type, &stats, sizeof(stats)) < 0) {
         DEBUG("Could not read stats\n");
     }
     else {
-        struct netstat_record netstats;
-        enum netstat_type record_type;
-        switch (type) {
-        case NETSTATS_ALL:
-            record_type = NETSTATS_RECORD_TYPE_ALL;
-            break;
-        case NETSTATS_IPV6:
-            record_type = NETSTATS_RECORD_TYPE_IPV6;
-            break;
-        case NETSTATS_LAYER2:
-            record_type = NETSTATS_RECORD_TYPE_L2;
-            break;
-        default:
-            return -1;
-        }
-        copy_netstat_to_record(&stats, record_type, &netstats);
-        record_list_insert(list, (uint8_t *)&netstats, sizeof(netstats));
+        copy_netstat_to_record(&stats, dest);
     }
     return 0;
 }
@@ -73,15 +54,17 @@ static void *_stats_loop(void *ctx)
 
     init_battery_adc();
     while (1) {
-        // Get new information
-        struct power_record power = { .time = ztimer_now(ZTIMER_MSEC), .millivolts = read_battery_mv() };
-        record_list_insert(args->power_list, (uint8_t *)&power, sizeof(power));
-
+        struct stats_record record = { 0 };
+        record.time = ztimer_now(ZTIMER_MSEC);
+        record.millivolts = read_battery_mv();
+        // If we don't have a netif, just leave stats zeroed. Should be fine
         if (radio_netif) {
             // Collect the L2 and IPv6 stats independently so we can see difference between the two
-            collect_netstats(&radio_netif->netif, NETSTATS_LAYER2, args->netstat_list);
-            collect_netstats(&radio_netif->netif, NETSTATS_IPV6, args->netstat_list);
+            collect_netstats(&radio_netif->netif, NETSTATS_LAYER2, &record.l2);
+            collect_netstats(&radio_netif->netif, NETSTATS_IPV6, &record.l3);
         }
+        record_list_insert(args->stats_list, (uint8_t *)&record, sizeof(record));
+
         DEBUG("Stats sleeping\n");
         ztimer_sleep(ZTIMER_MSEC, TIME_BETWEEN_STATS_COLLECTION_MS);
     }

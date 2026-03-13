@@ -67,7 +67,7 @@ static inline unsigned int clamp_width(unsigned int value, unsigned int width)
 }
 
 // Draw to the display, providng all parameters that will be shown on the display
-void draw_display(unsigned int battery_mv, int display_route_notif, unsigned int identifier, struct netstat_record *main_stats)
+void draw_display(int display_route_notif, unsigned int identifier, struct stats_record *stats)
 {
     static char text_buffer[MAX_STRLEN];
 
@@ -82,7 +82,7 @@ void draw_display(unsigned int battery_mv, int display_route_notif, unsigned int
         // u8g2 draws downwards, so set cursor to after the first line on the display
         unsigned int cursor_y = font_height;
 
-        snprintf(text_buffer, sizeof(text_buffer), "%." STR(MAX_BAT_WIDTH) "dmV", clamp_width(battery_mv, MAX_BAT_WIDTH));
+        snprintf(text_buffer, sizeof(text_buffer), "%." STR(MAX_BAT_WIDTH) "dmV", clamp_width(stats->millivolts, MAX_BAT_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
 
         snprintf(text_buffer, sizeof(text_buffer), "ID:%." STR(MAX_ID_WIDTH) "d", clamp_width(identifier, MAX_ID_WIDTH));
@@ -98,8 +98,8 @@ void draw_display(unsigned int battery_mv, int display_route_notif, unsigned int
         next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
 
         snprintf(text_buffer, sizeof(text_buffer), "TX %u RX %u",
-                 clamp_width(main_stats->tx_unicast_count, MAX_COUNT_WIDTH),
-                 clamp_width(main_stats->rx_count, MAX_COUNT_WIDTH));
+                 clamp_width(stats->l3.tx_unicast_count, MAX_COUNT_WIDTH),
+                 clamp_width(stats->l3.rx_count, MAX_COUNT_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer);
         next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
 
@@ -111,14 +111,12 @@ static void *_display_loop(void *ctx)
 {
     struct display_thread_args *args = ctx;
 
-    struct power_record power = { 0 };
-    struct netstat_record netstat = { 0 };
+    struct stats_record stats = { 0 };
     struct capture_record capture = { 0 };
 
     while (1) {
         // By not handling empty case - either print zeroed capture or keep whatever we had last
-        record_list_first(args->power_list, (uint8_t *)&power, sizeof(power));
-        record_list_first(args->netstat_list, (uint8_t *)&netstat, sizeof(netstat));
+        record_list_first(args->stats_list, (uint8_t *)&stats, sizeof(stats));
         record_list_first(args->capture_list, (uint8_t *)&capture, sizeof(capture));
 
         int display_route_notif = 0;
@@ -127,7 +125,7 @@ static void *_display_loop(void *ctx)
             display_route_notif = 1;
         }
 
-        draw_display(power.millivolts, display_route_notif, args->config->this_id, &netstat);
+        draw_display(display_route_notif, args->config->this_id, &stats);
         // 4Hz refresh rate to not use up too much battery life, hopefully
         DEBUG("Display sleeping\n");
         ztimer_sleep(ZTIMER_MSEC, TIME_BETWEEN_DRAW_MS);
