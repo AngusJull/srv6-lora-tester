@@ -11,20 +11,13 @@ typedef uint32_t stat_time_t;
 #  define STAT_TIME_FMT PRIu32
 #endif
 
-// Doubly linked list element
-// Using void pointer instead of something type safe because dealing with container_of and thread safety
-// gets to be really cumbersome and hard to make a good interface for
-struct dl_item {
-    void *record;
-    size_t record_len;
-    struct dl_item *next;
-    struct dl_item *prev;
-};
-
-// Linked list with mutex to provide thread safety
-struct dl_list {
+// Record list, implementing the very basics of a vector, pretty much
+struct record_list {
     mutex_t mutex;
-    struct dl_item *head;
+    uint8_t *elements;
+    unsigned int len;
+    unsigned int capacity;
+    size_t record_size;
 };
 
 struct power_record {
@@ -88,14 +81,15 @@ struct latency_record {
     stat_time_t round_trip_time;
 };
 
-void dl_list_init(struct dl_list *list);
-int dl_list_add(struct dl_list *list, uint8_t *data, size_t data_len);
-void dl_list_iter(struct dl_list *list, int (*func)(uint8_t *data, size_t data_len, void *ctx), void *ctx);
-size_t dl_list_first(struct dl_list *list, uint8_t *data, size_t data_len);
-unsigned int dl_list_count(struct dl_list *list);
-int dl_list_clear(struct dl_list *list);
+void record_list_init(struct record_list *list, unsigned int record_size);
+int record_list_resize(struct record_list *list, unsigned int capacity);
+int record_list_insert(struct record_list *list, uint8_t *record, size_t record_size);
+void record_list_iter(struct record_list *list, int (*func)(uint8_t *record, size_t record_size, void *ctx), void *ctx);
+int record_list_first(struct record_list *list, uint8_t *record, size_t record_size);
+unsigned int record_list_len(struct record_list *list);
+int record_list_clear(struct record_list *list);
 
-void print_record_list_json_array(struct dl_list *list, void (*print_func)(void *, size_t));
+void print_record_list_json_array(struct record_list *list, void (*print_func)(void *, size_t));
 void print_power_record(struct power_record *record);
 void print_netstat_record(struct netstat_record *record);
 void print_capture_record(struct capture_record *record);

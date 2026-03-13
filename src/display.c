@@ -121,9 +121,9 @@ static void *_display_loop(void *ctx)
 
     while (1) {
         // By not handling empty case - either print zeroed capture or keep whatever we had last
-        dl_list_first(args->power_list, (uint8_t *)&power, sizeof(power));
-        dl_list_first(args->netstat_list, (uint8_t *)&netstat, sizeof(netstat));
-        dl_list_first(args->capture_list, (uint8_t *)&capture, sizeof(capture));
+        record_list_first(args->power_list, (uint8_t *)&power, sizeof(power));
+        record_list_first(args->netstat_list, (uint8_t *)&netstat, sizeof(netstat));
+        record_list_first(args->capture_list, (uint8_t *)&capture, sizeof(capture));
 
         int display_route_notif = 0;
         ztimer_now_t time = ztimer_now(ZTIMER_MSEC);

@@ -38,7 +38,7 @@ static void copy_netstat_to_record(netstats_t *from, enum netstat_type type, str
     dest->time = ztimer_now(ZTIMER_MSEC);
 }
 
-static int collect_netstats(netif_t *netif, unsigned int type, struct dl_list *list)
+static int collect_netstats(netif_t *netif, unsigned int type, struct record_list *list)
 {
     netstats_t stats;
     if (netif_get_opt(netif, NETOPT_STATS, type, &stats, sizeof(stats)) < 0) {
@@ -61,7 +61,7 @@ static int collect_netstats(netif_t *netif, unsigned int type, struct dl_list *l
             return -1;
         }
         copy_netstat_to_record(&stats, record_type, &netstats);
-        dl_list_add(list, (uint8_t *)&netstats, sizeof(netstats));
+        record_list_insert(list, (uint8_t *)&netstats, sizeof(netstats));
     }
     return 0;
 }
@@ -78,7 +78,7 @@ static void *_stats_loop(void *ctx)
     while (1) {
         // Get new information
         struct power_record power = { .time = ztimer_now(ZTIMER_MSEC), .millivolts = read_battery_mv() };
-        dl_list_add(args->power_list, (uint8_t *)&power, sizeof(power));
+        record_list_insert(args->power_list, (uint8_t *)&power, sizeof(power));
 
         if (radio_netif) {
             // Collect the L2 and IPv6 stats independently so we can see difference between the two

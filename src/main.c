@@ -16,10 +16,10 @@
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
-static struct dl_list netstat_list;
-static struct dl_list power_list;
-static struct dl_list capture_list;
-static struct dl_list latency_list;
+static struct record_list netstat_list;
+static struct record_list power_list;
+static struct record_list capture_list;
+static struct record_list latency_list;
 
 // Keep the configuration in a global so we have the option to modify it in a shell command
 static struct node_configuration config;
@@ -42,10 +42,10 @@ int main(void)
     // No point continuing if we can't configure correctly
     assert(apply_node_configuration(radio, &config) == 0);
 
-    dl_list_init(&netstat_list);
-    dl_list_init(&power_list);
-    dl_list_init(&capture_list);
-    dl_list_init(&latency_list);
+    record_list_init(&netstat_list, sizeof(struct netstat_record));
+    record_list_init(&power_list, sizeof(struct power_record));
+    record_list_init(&capture_list, sizeof(struct capture_record));
+    record_list_init(&latency_list, sizeof(struct latency_record));
 
     init_stats_thread(&(struct stats_thread_args){ .power_list = &power_list, .netstat_list = &netstat_list });
     init_display_thread(&(struct display_thread_args){ .power_list = &power_list, .netstat_list = &netstat_list, .capture_list = &capture_list, .config = &config });
@@ -63,10 +63,10 @@ static int _buffer_state(int argc, char **argv)
     (void)argc;
     (void)argv;
 
-    unsigned power_count = dl_list_count(&power_list);
-    unsigned netstat_count = dl_list_count(&netstat_list);
-    unsigned capture_count = dl_list_count(&capture_list);
-    unsigned latency_count = dl_list_count(&latency_list);
+    unsigned power_count = record_list_len(&power_list);
+    unsigned netstat_count = record_list_len(&netstat_list);
+    unsigned capture_count = record_list_len(&capture_list);
+    unsigned latency_count = record_list_len(&latency_list);
 
     printf("Count/Bytes: Netstat: %u/%u, Power: %u/%u, Capture: %u/%u, Latency: %u/%u\n",
            netstat_count, netstat_count * sizeof(struct netstat_record),
@@ -131,10 +131,10 @@ static int _clear_records(int argc, char **argv)
     (void)argc;
     (void)argv;
 
-    dl_list_clear(&latency_list);
-    dl_list_clear(&power_list);
-    dl_list_clear(&capture_list);
-    dl_list_clear(&netstat_list);
+    record_list_clear(&latency_list);
+    record_list_clear(&power_list);
+    record_list_clear(&capture_list);
+    record_list_clear(&netstat_list);
 
     return 0;
 }

@@ -4,7 +4,7 @@
 #include "records.h"
 
 struct sendrecv_thread_args {
-    struct dl_list *latency_list;
+    struct record_list *latency_list;
     struct node_configuration *config;
 };
 

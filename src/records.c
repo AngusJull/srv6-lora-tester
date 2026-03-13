@@ -1,77 +1,78 @@
 #include "stdlib.h"
 #include "stdio.h"
 #include "string.h"
-#include "utlist.h"
-#include <sys/_types.h>
+
+#define ENABLE_DEBUG 0
+#include "debug.h"
 
 #include "records.h"
 
+#define RECORD_LIST_INIT_CAPACITY 4
+
+// Resize the list, but don't lock the mutex. Mutex MUST be locked already
+// Doesn't look like RIOT checks owner of mutex when locking
+static int _record_list_resize(struct record_list *list, unsigned int capacity)
+{
+    // If capacity is zero, elements must already be free
+    if (capacity == 0 && list->capacity == 0) {
+        return 0;
+    }
+
+    uint8_t *new_elements = realloc(list->elements, list->record_size * capacity);
+    if (new_elements) {
+        list->elements = new_elements;
+        list->capacity = capacity;
+        DEBUG("Resized list to %u elements, %u bytes\n", capacity, capacity * list->record_size);
+        return 0;
+    }
+    printf("Failed to allocate new memory!\n");
+    return 1;
+}
+
 // Initalize a new list with no elements
-void dl_list_init(struct dl_list *list)
+void record_list_init(struct record_list *list, unsigned int record_size)
 {
-    list->head = NULL;
     mutex_init(&list->mutex);
-}
-
-// Add an element to the list by allocating a new element and copying some data into it
-int dl_list_add(struct dl_list *list, uint8_t *data, size_t data_len)
-{
-    // Just put the data immediately after the struct
-    struct dl_item *new = malloc(sizeof(*new) + data_len);
-    if (new == NULL) {
-        printf("ERROR: Could not allocate memory for new record, discarding\n");
-        return -1;
-    }
-    memset(new, 0, sizeof(*new));
-
-    // Copy data into record, which has memory allocated right after new
-    new->record = new + 1;
-    new->record_len = data_len;
-    memcpy(new->record, data, data_len);
-
-    // Only lock when we're totally ready to put in the list
     mutex_lock(&list->mutex);
 
-    DL_PREPEND(list->head, new);
-
-    mutex_unlock(&list->mutex);
-
-    return 0;
-}
-
-// The provided function is called with the given context and the record pointer for each element
-// Iteration stops if the provided function returns 0
-// In the future, this could be extended to provide a way to remove the current element if needed
-void dl_list_iter(struct dl_list *list, int (*func)(uint8_t *data, size_t data_len, void *ctx), void *ctx)
-{
-    mutex_lock(&list->mutex);
-
-    struct dl_item *item;
-    DL_FOREACH(list->head, item)
-    {
-        if (func(item->record, item->record_len, ctx) == 0) {
-            break;
-        }
-    }
+    list->record_size = record_size;
+    list->capacity = 0;
+    list->len = 0;
+    _record_list_resize(list, RECORD_LIST_INIT_CAPACITY);
 
     mutex_unlock(&list->mutex);
 }
 
-// Copy out the first item in the linked list and return record_len, or return 0
-// record_len MUST be the same size as every item put into the list
-size_t dl_list_first(struct dl_list *list, uint8_t *data, size_t data_len)
+// Resize the list to store capacity elements
+int record_list_resize(struct record_list *list, unsigned int capacity)
 {
-    size_t ret = 0;
-
     mutex_lock(&list->mutex);
 
-    if (list->head != NULL) {
-        size_t copy_len = data_len;
-        if (list->head->record_len < data_len) {
-            copy_len = list->head->record_len;
-        }
-        memcpy(data, list->head->record, copy_len);
-        ret = copy_len;
+    int ret = _record_list_resize(list, capacity);
+
+    mutex_unlock(&list->mutex);
+
+    return ret;
+}
+
+// Add an element to the front of the list by allocating a new element and copying some data into it
+// Return 0 if the element was added, or 1 otherwise
+int record_list_insert(struct record_list *list, uint8_t *record, size_t record_size)
+{
+    assert(record_size == list->record_size);
+
+    int ret = 0;
+    mutex_lock(&list->mutex);
+
+    // If we end up out of space, allocate more
+    if (list->len >= list->capacity && _record_list_resize(list, list->capacity * 2)) {
+        ret = 1;
+    }
+    else {
+        // Actually put the element on the end, but consistently use the list as if it goes
+        // on the front so just use that terminology
+        memcpy(&list->elements[list->len * list->record_size], record, record_size);
+        list->len++;
     }
 
     mutex_unlock(&list->mutex);
@@ -79,31 +80,64 @@ size_t dl_list_first(struct dl_list *list, uint8_t *data, size_t data_len)
     return ret;
 }
 
-unsigned int dl_list_count(struct dl_list *list)
+// The provided function is called with the given context and the record pointer for each element
+// Iteration stops if the provided function does not return zero
+// In the future, this could be extended to provide a way to remove the current element if needed
+void record_list_iter(struct record_list *list, int (*func)(uint8_t *record, size_t record_size, void *ctx), void *ctx)
 {
     mutex_lock(&list->mutex);
 
-    struct dl_item *item;
-    unsigned int count = 0;
-    DL_COUNT(list->head, item, count);
+    // Iterate backwards so we see the newest element first and oldest element last,
+    // since all other operations start at the end or modify the end
+    for (unsigned int i = list->len; i-- > 0;) {
+        if (func(&list->elements[i * list->record_size], list->record_size, ctx)) {
+            break;
+        }
+    }
+
+    mutex_unlock(&list->mutex);
+}
+
+// Copy out the first element of this list and return 0, or if it is empty return 1
+int record_list_first(struct record_list *list, uint8_t *record, size_t record_size)
+{
+    assert(record_size == list->record_size);
+
+    int ret = 0;
+    mutex_lock(&list->mutex);
+
+    if (list->len) {
+        memcpy(record, &list->elements[(list->len - 1) * list->record_size], record_size);
+    }
+    else {
+        ret = 1;
+    }
 
     mutex_unlock(&list->mutex);
 
-    return count;
+    return ret;
 }
-int dl_list_clear(struct dl_list *list)
+
+// Get the length of the list
+unsigned int record_list_len(struct record_list *list)
+{
+    unsigned int len;
+    mutex_lock(&list->mutex);
+
+    len = list->len;
+
+    mutex_unlock(&list->mutex);
+
+    return len;
+}
+
+// Remove all elements from the list
+int record_list_clear(struct record_list *list)
 {
     mutex_lock(&list->mutex);
 
-    struct dl_item *item;
-    struct dl_item *tmp;
-    DL_FOREACH_SAFE(list->head, item, tmp)
-    {
-        // Probably don't need to bother doing this
-        DL_DELETE(list->head, item);
-        // Because we used just one malloc for the list item and data, can do a single free here too
-        free(item);
-    }
+    list->len = 0;
+    _record_list_resize(list, RECORD_LIST_INIT_CAPACITY);
 
     mutex_unlock(&list->mutex);
 
@@ -126,14 +160,14 @@ static int _print_record_list_json_array_inner(uint8_t *data, size_t data_len, v
     args->index++;
     args->print_func(data, data_len);
 
-    return 1;
+    return 0;
 }
 
-void print_record_list_json_array(struct dl_list *list, void (*print_func)(void *, size_t))
+void print_record_list_json_array(struct record_list *list, void (*print_func)(void *, size_t))
 {
     puts("[");
     struct print_record_list_json_array_inner_ctx args = { .index = 0, .print_func = print_func };
-    dl_list_iter(list, _print_record_list_json_array_inner, &args);
+    record_list_iter(list, _print_record_list_json_array_inner, &args);
     puts("]");
 }
 
@@ -149,18 +183,12 @@ void print_netstat_record(struct netstat_record *record)
     printf("{\"time\":%" STAT_TIME_FMT
            ",\"type\":%d"
            ",\"tx_unicast_count\":%" PRIu32
-           ",\"tx_mcast_count\":%" PRIu32
-           ",\"tx_success\":%" PRIu32
-           ",\"tx_failed\":%" PRIu32
            ",\"tx_bytes\":%" PRIu32
            ",\"rx_count\":%" PRIu32
            ",\"rx_bytes\":%" PRIu32 "}",
            record->time,
            record->type,
            record->tx_unicast_count,
-           record->tx_mcast_count,
-           record->tx_success,
-           record->tx_failed,
            record->tx_bytes,
            record->rx_count,
            record->rx_bytes);

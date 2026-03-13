@@ -86,7 +86,7 @@ static unsigned int segments_left(gnrc_pktsnip_t *pkt)
     return 0;
 }
 
-static void add_capture_record(struct dl_list *capture_list, gnrc_pktsnip_t *pkt, enum capture_event_type type)
+static void add_capture_record(struct record_list *capture_list, gnrc_pktsnip_t *pkt, enum capture_event_type type)
 {
     // Can find some examples of how to work on packets in gnrc_ipv6.c:760
     // Packet snips are ordered from lowest layer to highest layer when sending, and from highest layer to lowest layer when recieving
@@ -102,7 +102,7 @@ static void add_capture_record(struct dl_list *capture_list, gnrc_pktsnip_t *pkt
         record.segments_left = segments_left(pkt);
     }
     DEBUG("Got a packet with type %d, header length %d, payload length %d\n", pkt->type, lengths.headers_len, lengths.payload_len);
-    dl_list_add(capture_list, (uint8_t *)&record, sizeof(record));
+    record_list_insert(capture_list, (uint8_t *)&record, sizeof(record));
 }
 
 // Make sure the packet is destined for an acceptable network interface and has a netif snip on it

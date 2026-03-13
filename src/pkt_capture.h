@@ -4,7 +4,7 @@
 #include "records.h"
 
 struct pkt_capture_thread_args {
-    struct dl_list *capture_list;
+    struct record_list *capture_list;
 };
 
 void init_pkt_capture_thread(struct pkt_capture_thread_args *args);
