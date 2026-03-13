@@ -36,16 +36,11 @@ struct netstat_record {
     enum netstat_type type;
     stat_time_t time;
 
-    // Copied from netstats_t, so that we can remove or add fields later
-    uint32_t tx_unicast_count; /**< packets sent via unicast */
-    uint32_t tx_mcast_count;   /**< packets sent via multicast (including broadcast) */
-    uint32_t tx_success;       /**< successful sending operations
-                                (either acknowledged or unconfirmed
-                                sending operation, e.g. multicast) */
-    uint32_t tx_failed;        /**< failed sending operations */
-    uint32_t tx_bytes;         /**< sent bytes */
-    uint32_t rx_count;         /**< received (data) packets */
-    uint32_t rx_bytes;         /**< received bytes */
+    // netstats come with other fields that don't seem to be used properly by the board
+    uint32_t tx_unicast_count;
+    uint32_t tx_bytes;
+    uint32_t rx_count;
+    uint32_t rx_bytes;
 };
 
 enum capture_event_type {

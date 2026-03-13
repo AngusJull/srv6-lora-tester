@@ -8,10 +8,10 @@
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
-#define S_TO_MS               1000
+#define TIME_BETWEEN_STATS_COLLECTION_MS 5000
 
-#define STATS_THREAD_PRIORITY (THREAD_PRIORITY_MAIN - 2)
-#define THREAD_PRIORITY_MED   (THREAD_PRIORITY_MAIN + 1)
+#define STATS_THREAD_PRIORITY            (THREAD_PRIORITY_MAIN - 2)
+#define THREAD_PRIORITY_MED              (THREAD_PRIORITY_MAIN + 1)
 // Stack for the stats thread
 static char _stack[THREAD_STACKSIZE_MEDIUM];
 
@@ -28,9 +28,6 @@ static void copy_netstat_to_record(netstats_t *from, enum netstat_type type, str
 {
     dest->rx_bytes = from->rx_bytes;
     dest->tx_bytes = from->tx_bytes;
-    dest->tx_failed = from->tx_failed;
-    dest->tx_success = from->tx_success;
-    dest->tx_mcast_count = from->tx_mcast_count;
     dest->tx_unicast_count = from->tx_unicast_count;
     dest->rx_count = from->rx_count;
     dest->type = type;
@@ -86,7 +83,7 @@ static void *_stats_loop(void *ctx)
             collect_netstats(&radio_netif->netif, NETSTATS_IPV6, args->netstat_list);
         }
         DEBUG("Stats sleeping\n");
-        ztimer_sleep(ZTIMER_MSEC, S_TO_MS * 5);
+        ztimer_sleep(ZTIMER_MSEC, TIME_BETWEEN_STATS_COLLECTION_MS);
     }
     return NULL;
 }
