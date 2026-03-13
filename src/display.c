@@ -2,7 +2,6 @@
 #include "u8g2.h"
 #include "u8x8_riotos.h"
 #include "ztimer.h"
-#include "irq.h"
 #include "stdio.h"
 
 #define ENABLE_DEBUG 0

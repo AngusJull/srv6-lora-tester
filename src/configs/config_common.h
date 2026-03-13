@@ -113,6 +113,8 @@ struct topology_configuration {
 struct node_configuration {
     unsigned int this_id;
     unsigned int use_srv6;
+    unsigned int throughput_test;
+    unsigned int topology_id;
     struct topology_configuration *topology;
 };
 

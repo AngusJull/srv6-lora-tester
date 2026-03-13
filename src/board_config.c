@@ -180,7 +180,7 @@ static int configure_forwarding_entries(gnrc_netif_t *netif, struct node_configu
 
 static struct saved_config default_saved_config(void)
 {
-    return (struct saved_config){ .config_id = CONFIG_ID, .chosen_topology = TOPOLOGY_ID, .use_srv6 = USE_SRV6 };
+    return (struct saved_config){ .config_id = CONFIG_ID, .chosen_topology = TOPOLOGY_ID, .use_srv6 = USE_SRV6, .throughput_test = 0 };
 }
 
 // Get configuration information related to a node (must be a valid node)
@@ -191,6 +191,7 @@ struct node_configuration get_node_configuration(void)
 
     assert(loaded_config.chosen_topology < TOPOLOGY_NUM_TOPOLOGIES);
     node_config.topology = topology_array[loaded_config.chosen_topology];
+    node_config.topology_id = loaded_config.chosen_topology;
 
     if (loaded_config.config_id >= node_config.topology->num_nodes) {
         DEBUG("Config ID (%d) does not match topology. Reverting to default ID\n", loaded_config.config_id);
@@ -199,6 +200,7 @@ struct node_configuration get_node_configuration(void)
     node_config.this_id = loaded_config.config_id;
 
     node_config.use_srv6 = loaded_config.use_srv6;
+    node_config.throughput_test = loaded_config.throughput_test;
 
     return node_config;
 }
@@ -281,7 +283,8 @@ struct saved_config get_saved_configuration(void)
         config = default_saved_config();
         set_saved_configuration(config);
     }
-    DEBUG("Loaded configuration with fields config id %u, topology %u, use_srv6 %u\n", config.config_id, config.chosen_topology, config.use_srv6);
+    DEBUG("Loaded configuration with fields config id %u, topology %u, use_srv6 %u, throughput test %u\n",
+          config.config_id, config.chosen_topology, config.use_srv6, config.throughput_test);
     return config;
 }
 
@@ -292,5 +295,5 @@ void set_saved_configuration(struct saved_config config)
 
     flashpage_erase(FLASHPAGE);
     flashpage_write(flashpage_addr(FLASHPAGE), &stored_config, sizeof(stored_config));
-    DEBUG("Wrote configuration with fields config id %u, topology %u, use_srv6 %u\n", config.config_id, config.chosen_topology, config.use_srv6);
+    DEBUG("Wrote configuration with fields config id %u, topology %u, use_srv6 %u, throughput test %u\n", config.config_id, config.chosen_topology, config.use_srv6, config.throughput_test);
 }

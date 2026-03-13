@@ -29,19 +29,43 @@ static char _stack[THREAD_STACKSIZE_MEDIUM];
 static msg_t _msg_q[QUEUE_SIZE];
 
 // How many milliseconds to wait before sender assumes the receiver didn't get their message
-#define SENDER_TIMEOUT_MS 5000
+#define SENDER_NORMAL_RESPONSE_TIMEOUT     10000
 
-static gnrc_pktsnip_t *build_pkt_ipv6(unsigned int dest_id, struct node_configuration *config)
+// How many milliseconds to wait when sending larger packets (adds a lot of delay)
+#define SENDER_THROUGHPUT_RESPONSE_TIMEOUT 20000
+
+// How long to wait after getting a response when sending normally
+#define SENDER_WAIT_TIMEOUT                0
+
+// A really big packet when doing throughput things
+#define PACKET_THROUGHPUT_SIZE             512
+
+// The size of payloads when sending
+#define PACKET_NORMAL_SIZE                 100
+
+static char payload[PACKET_THROUGHPUT_SIZE] = "\0";
+
+static uint8_t *get_payload(void)
 {
-    const char msg[] = "hello world";
+    assert(PACKET_THROUGHPUT_SIZE >= PACKET_NORMAL_SIZE);
+    if (payload[0] == '\0') {
+        for (unsigned int i = 0; i < sizeof(payload); i++) {
+            payload[i] = 'A';
+        }
+        payload[sizeof(payload) - 1] = '\0';
+    }
+    return (uint8_t *)payload;
+}
 
+static gnrc_pktsnip_t *build_pkt_ipv6(unsigned int dest_id, struct node_configuration *config, uint8_t *payload, size_t payload_size)
+{
     ipv6_addr_t source_addr = get_node_addr(config->this_id, config);
     unsigned int source_port = get_node_port(config->this_id, config);
 
     ipv6_addr_t dest_addr = get_node_addr(dest_id, config);
     unsigned int dest_port = get_node_port(dest_id, config);
 
-    gnrc_pktsnip_t *pkt = gnrc_pktbuf_add(NULL, msg, sizeof(msg), GNRC_NETTYPE_UNDEF);
+    gnrc_pktsnip_t *pkt = gnrc_pktbuf_add(NULL, payload, payload_size, GNRC_NETTYPE_UNDEF);
     if (pkt == NULL) {
         DEBUG("Error: unable to copy data to packet buffer\n");
         return NULL;
@@ -81,10 +105,8 @@ static unsigned int count_segments(char *segments)
     return count;
 }
 
-static gnrc_pktsnip_t *build_pkt_srv6(struct srv6_route *route, struct node_configuration *config)
+static gnrc_pktsnip_t *build_pkt_srv6(struct srv6_route *route, struct node_configuration *config, uint8_t *payload, size_t payload_size)
 {
-    const char msg[] = "hello world";
-
     unsigned int num_segments = 1 + count_segments(route->segments);
 
     // Dest address makes at least one segment
@@ -93,7 +115,7 @@ static gnrc_pktsnip_t *build_pkt_srv6(struct srv6_route *route, struct node_conf
 
     unsigned int dest_port = get_node_port(route->dest_id, config);
     unsigned int source_port = get_node_port(config->this_id, config);
-    gnrc_pktsnip_t *pkt = srv6_pkt_init(source_port, dest_port, num_segments, msg, sizeof(msg));
+    gnrc_pktsnip_t *pkt = srv6_pkt_init(source_port, dest_port, num_segments, payload, payload_size);
 
     unsigned int segment_num = 0;
     char *ptr = route->segments;
@@ -122,8 +144,6 @@ static gnrc_pktsnip_t *build_pkt_srv6(struct srv6_route *route, struct node_conf
     // Will now include the ipv6 header on the outside
     pkt = srv6_pkt_complete(pkt, &source_addr);
 
-    debug_print_snip_chain("", pkt);
-
     return pkt;
 }
 
@@ -131,13 +151,18 @@ static int send(unsigned int dest_id, struct node_configuration *config)
 {
     gnrc_pktsnip_t *pkt = NULL;
 
+    size_t payload_size = PACKET_NORMAL_SIZE;
+    if (config->throughput_test) {
+        payload_size = PACKET_THROUGHPUT_SIZE;
+    }
+
     // Check if there's an appropriate route to use
     struct srv6_route *route = get_srv6_route(config->this_id, dest_id, config);
     if (config->use_srv6 && route) {
-        pkt = build_pkt_srv6(route, config);
+        pkt = build_pkt_srv6(route, config, get_payload(), payload_size);
     }
     else {
-        pkt = build_pkt_ipv6(dest_id, config);
+        pkt = build_pkt_ipv6(dest_id, config, get_payload(), payload_size);
     }
 
     // We were unable to build a packet
@@ -246,8 +271,13 @@ static void *_sender_loop(void *ctx)
         ztimer_now_t start = ztimer_now(ZTIMER_MSEC);
         send(get_node_traffic_config(args->config)->dest_id, args->config);
 
+        unsigned int timeout = SENDER_NORMAL_RESPONSE_TIMEOUT;
+        if (args->config->throughput_test) {
+            timeout = SENDER_THROUGHPUT_RESPONSE_TIMEOUT;
+        }
+
         DEBUG("Starting receive\n");
-        gnrc_pktsnip_t *pkt = recv(SENDER_TIMEOUT_MS);
+        gnrc_pktsnip_t *pkt = recv(timeout);
         if (pkt == NULL) {
             DEBUG("No response, timed out\n");
             ztimer_now_t end = ztimer_now(ZTIMER_MSEC);
@@ -267,7 +297,7 @@ static void *_sender_loop(void *ctx)
         struct latency_record latency = { .time = end, .type = LATENCY_RECORD_TYPE_NOMINAL, .round_trip_time = round_trip };
         dl_list_add(args->latency_list, (unsigned char *)&latency, sizeof(latency));
         DEBUG("Added a latency record with round trip time %" PRIu32 " ms\n", round_trip);
-        ztimer_sleep(ZTIMER_MSEC, 1000);
+        ztimer_sleep(ZTIMER_MSEC, SENDER_WAIT_TIMEOUT);
     }
     return NULL;
 }
@@ -296,6 +326,10 @@ static void *_receiver_loop(void *ctx)
         // This could probably just be replaced with dest_id from traffic configuration,
         // but because it's a more general solution to can leave it
         int src_id = get_node_id(&ipv6_header->src, args->config);
+
+        // Make sure we release the packet's data
+        gnrc_pktbuf_release(pkt);
+
         if (src_id < 0) {
             // This might happen if there are misconfigured nodes, or other traffic
             DEBUG("Got a message from an unknown node\n");
@@ -304,8 +338,6 @@ static void *_receiver_loop(void *ctx)
             send(src_id, args->config);
             DEBUG("Sent a response back\n");
         }
-        // Make sure we release the packet's data
-        gnrc_pktbuf_release(pkt);
     }
     return NULL;
 }

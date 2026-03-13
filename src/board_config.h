@@ -18,6 +18,7 @@ struct saved_config {
     uint8_t config_id;
     uint8_t chosen_topology;
     uint8_t use_srv6;
+    uint8_t throughput_test;
 };
 
 // Get and apply configuration for a node

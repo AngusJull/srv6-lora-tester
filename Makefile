@@ -77,13 +77,6 @@ USEMODULE += ztimer_sec
 USEMODULE += periph_flashpage
 USEMODULE += checksum
 
-# We use only the lower layers of the GNRC network stack, hence, we can
-# reduce the size of the packet buffer a bit
-# Set GNRC_PKTBUF_SIZE via CFLAGS if not being set via Kconfig.
-ifndef CONFIG_GNRC_PKTBUF_SIZE
-	CFLAGS += -DCONFIG_GNRC_PKTBUF_SIZE=2048
-endif
-
 SRC += $(wildcard src/*.c) $(wildcard src/configs/*.c)
 
 # Set a default board ID, for configuration, or use whatever is supplied by an env variable
