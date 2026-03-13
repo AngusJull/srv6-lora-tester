@@ -8,8 +8,26 @@ DATA_END_SEQUENCE = "}\n"
 RETREIVAL_COMMAND = "print_records"
 
 
+def read_until_no_data(conn, timeout):
+    end_time = time.time() + timeout
+    received_data = bytearray()
+
+    while True:
+        if conn.in_waiting > 0:
+            data = conn.read_all()
+            received_data.extend(data)
+            end_time = time.time() + timeout
+            print(f"Got {len(data)} new bytes, now have {len(received_data)} bytes")
+        else:
+            if time.time() > end_time:
+                break
+            time.sleep(1)
+
+    return bytes(received_data)
+
+
 def collect(port):
-    conn = serial.Serial(port, 115200, timeout=1)
+    conn = serial.Serial(port, 115200, timeout=5)
     print("Serial connection opened")
 
     # Give the conn some time to open
@@ -17,13 +35,18 @@ def collect(port):
 
     conn.reset_output_buffer()
 
-    print("Getting data from board")
-    conn.write(RETREIVAL_COMMAND.encode())
-    # Make sure we don't pick up echoed output
-    conn.reset_output_buffer()
-    conn.write("\n".encode())
-    # Read until a certain sequence (pretty much hardcoded to our current format), or until timeout (more general)
-    data = conn.read_until(DATA_END_SEQUENCE.encode()).decode()
+    data = None
+    while not data:
+        print("Getting data from board")
+        conn.write(RETREIVAL_COMMAND.encode())
+        # Make sure we don't pick up echoed output
+        conn.reset_output_buffer()
+        conn.write("\n".encode())
+        # Read until a certain sequence (pretty much hardcoded to our current format), or until timeout (more general)
+        data = read_until_no_data(conn, 5).decode()
+
+        if not data:
+            print("Didn't get any data, sending command again")
 
     print(f"Got data {data}")
     try:
