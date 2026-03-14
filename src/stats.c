@@ -9,6 +9,8 @@
 #include "debug.h"
 
 #define TIME_BETWEEN_STATS_COLLECTION_MS 5000
+#define NUM_BATTERY_SAMPLES              10
+#define BATTERY_SAMPLE_SLEEP_MS          10
 
 #define STATS_THREAD_PRIORITY            (THREAD_PRIORITY_MAIN - 2)
 #define THREAD_PRIORITY_MED              (THREAD_PRIORITY_MAIN + 1)
@@ -44,6 +46,16 @@ static int collect_netstats(netif_t *netif, unsigned int type, struct netstats *
     return 0;
 }
 
+static unsigned int avg_battery(void)
+{
+    unsigned int sum = 0;
+    for (unsigned int i = 0; i < NUM_BATTERY_SAMPLES; i++) {
+        sum += read_battery_mv();
+        ztimer_sleep(ZTIMER_MSEC, BATTERY_SAMPLE_SLEEP_MS);
+    }
+    return sum / NUM_BATTERY_SAMPLES;
+}
+
 // Stats collection and recording loop
 static void *_stats_loop(void *ctx)
 {
@@ -55,8 +67,10 @@ static void *_stats_loop(void *ctx)
     init_battery_adc();
     while (1) {
         struct stats_record record = { 0 };
+        // Get the avg battery first because sampling takes some time
+        record.millivolts = avg_battery();
+        // Now can set the time
         record.time = ztimer_now(ZTIMER_MSEC);
-        record.millivolts = read_battery_mv();
         // If we don't have a netif, just leave stats zeroed. Should be fine
         if (radio_netif) {
             // Collect the L2 and IPv6 stats independently so we can see difference between the two
