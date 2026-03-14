@@ -122,7 +122,7 @@ static int _print_record_list_json_array_inner(uint8_t *data, size_t data_len, v
 
     // Prevent trailing comma that is invalid JSON
     if (args->index > 0) {
-        puts(",");
+        printf(",");
     }
     args->index++;
     args->print_func(data, data_len);
@@ -132,18 +132,18 @@ static int _print_record_list_json_array_inner(uint8_t *data, size_t data_len, v
 
 void print_record_list_json_array(struct record_list *list, void (*print_func)(void *, size_t))
 {
-    puts("[");
+    printf("[");
     struct print_record_list_json_array_inner_ctx args = { .index = 0, .print_func = print_func };
     record_list_iter(list, _print_record_list_json_array_inner, &args);
-    puts("]");
+    printf("]");
 }
 
 static void print_netstats(struct netstats *stats)
 {
-    printf("{\"tx_unicast_count\":%" PRIu16
-           ",\"tx_bytes\":%" PRIu32
-           ",\"rx_count\":%" PRIu16
-           ",\"rx_bytes\":%" PRIu32 "}",
+    printf("{\"tx_cnt\":%" PRIu16
+           ",\"tx_byt\":%" PRIu32
+           ",\"rx_cnt\":%" PRIu16
+           ",\"rx_byt\":%" PRIu32 "}",
            stats->tx_unicast_count,
            stats->tx_bytes,
            stats->rx_count,
@@ -152,21 +152,21 @@ static void print_netstats(struct netstats *stats)
 
 void print_stats_record(struct stats_record *record)
 {
-    printf("{\"time\":%" STAT_TIME_FMT ",\"millivolts\":%" PRIu16, record->time, record->millivolts);
-    puts(",l2: ");
+    printf("{\"time\":%" STAT_TIME_FMT ",\"mv\":%" PRIu16, record->time, record->millivolts);
+    printf(",\"l2\": ");
     print_netstats(&record->l2);
-    puts(",l3: ");
+    printf(",\"l3\": ");
     print_netstats(&record->l3);
-    puts("}");
+    printf("}");
 }
 
 void print_capture_record(struct capture_record *record)
 {
     printf("{\"time\":%" STAT_TIME_FMT
-           ",\"event_type\":%d"
-           ",\"packet_type\":%d"
-           ",\"headers_len\":%" PRIu16
-           ",\"payload_len\":%" PRIu16 "}",
+           ",\"ev_type\":%d"
+           ",\"pkt_type\":%d"
+           ",\"hdr_len\":%" PRIu16
+           ",\"pld_len\":%" PRIu16 "}",
            record->time,
            record->event_type,
            record->packet_type,
@@ -178,7 +178,7 @@ void print_latency_record(struct latency_record *record)
 {
     printf("{\"time\":%" STAT_TIME_FMT
            ",\"type\":%d"
-           ",\"round_trip_time\":%" STAT_TIME_FMT "}",
+           ",\"rt_time\":%" STAT_TIME_FMT "}",
            record->time,
            record->type,
            record->round_trip_time);

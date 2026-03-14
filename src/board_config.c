@@ -209,19 +209,19 @@ struct node_configuration get_node_configuration(void)
 int apply_node_configuration(gnrc_netif_t *netif, struct node_configuration *config)
 {
     if (configure_802154(netif, get_node_addr_config(config)) < 0) {
-        puts("Could not apply 802.15.4 configuration completely\n");
+        printf("Could not apply 802.15.4 configuration completely\n");
         return -1;
     }
     if (configure_ipv6(netif, get_node_addr_config(config)) < 0) {
-        puts("Could not apply IPv6 conifguration completely\n");
+        printf("Could not apply IPv6 conifguration completely\n");
         return -1;
     }
     if (configure_sixlowpan()) {
-        puts("Could not apply sixlowpan confiugration completely\n");
+        printf("Could not apply sixlowpan confiugration completely\n");
         return -1;
     }
     if (configure_forwarding_entries(netif, config)) {
-        puts("Could not apply forwarding confiugration completely\n");
+        printf("Could not apply forwarding confiugration completely\n");
         return -1;
     }
     return 0;

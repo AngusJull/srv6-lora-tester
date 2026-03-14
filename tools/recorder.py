@@ -4,7 +4,7 @@ import time
 import datetime
 import json
 
-DATA_END_SEQUENCE = "}\n"
+DATA_END_SEQUENCE = "}\n".encode()
 RETREIVAL_COMMAND = "print_records"
 
 
@@ -14,8 +14,14 @@ def read_until_no_data(conn, timeout):
 
     while True:
         if conn.in_waiting > 0:
-            data = conn.read_all()
+            # Don't get the prompt when the cmd completes
+            data: bytes = conn.read_until(DATA_END_SEQUENCE)
             received_data.extend(data)
+
+            if data.endswith(DATA_END_SEQUENCE):
+                print("Got end statement")
+                break
+
             end_time = time.time() + timeout
             print(f"Got {len(data)} new bytes, now have {len(received_data)} bytes")
         else:
@@ -27,7 +33,7 @@ def read_until_no_data(conn, timeout):
 
 
 def collect(port):
-    conn = serial.Serial(port, 115200, timeout=5)
+    conn = serial.Serial(port, 115200, timeout=None)
     print("Serial connection opened")
 
     # Give the conn some time to open
@@ -43,7 +49,7 @@ def collect(port):
         conn.reset_output_buffer()
         conn.write("\n".encode())
         # Read until a certain sequence (pretty much hardcoded to our current format), or until timeout (more general)
-        data = read_until_no_data(conn, 5).decode()
+        data = read_until_no_data(conn, 0.5).decode()
 
         if not data:
             print("Didn't get any data, sending command again")

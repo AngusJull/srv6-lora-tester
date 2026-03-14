@@ -56,7 +56,7 @@ int main(void)
     init_pkt_capture_thread(&(struct pkt_capture_thread_args){ .capture_list = &capture_list });
     init_sendrecv_thread(&(struct sendrecv_thread_args){ .latency_list = &latency_list, .config = &config });
 
-    (void)puts("Threads started, running shell\n");
+    (void)printf("Threads started, running shell\n");
     _shell_loop(NULL);
 
     return 0;
@@ -100,7 +100,7 @@ static int _print_records(int argc, char **argv)
     (void)argc;
     (void)argv;
 
-    puts("{");
+    printf("{");
     printf("\"node_id\":%u,", config.this_id);
     printf("\"topology_id\":%u,", config.topology_id);
     printf("\"use_srv6\":%u,", config.use_srv6);
@@ -108,16 +108,16 @@ static int _print_records(int argc, char **argv)
 
     printf("\"latency_records\":");
     print_record_list_json_array(&latency_list, print_latency_record_data);
-    puts(",");
+    printf(",");
 
-    puts("\"capture_records\":");
+    printf("\"capture_records\":");
     print_record_list_json_array(&capture_list, print_capture_record_data);
-    puts(",");
+    printf(",");
 
-    puts("\"stats_records\":");
+    printf("\"stats_records\":");
     print_record_list_json_array(&stats_list, print_netstat_record_data);
 
-    puts("}\n");
+    printf("}\n");
 
     return 0;
 }
@@ -138,8 +138,8 @@ static int _clear_records(int argc, char **argv)
 static int _set_config(int argc, char **argv)
 {
     if (argc < 2) {
-        puts("Set configuration for this board\n");
-        puts("Usage: set_config [id <config_id>] [topo <toplogy_id>] [sr <use_srv6>] [tp <throughput_test>]");
+        printf("Set configuration for this board\n");
+        printf("Usage: set_config [id <config_id>] [topo <toplogy_id>] [sr <use_srv6>] [tp <throughput_test>]");
         return 1;
     }
 

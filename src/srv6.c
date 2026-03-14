@@ -16,7 +16,7 @@ void debug_print_snip_chain(const char *msg, gnrc_pktsnip_t *pkt)
         printf("[%d:%u]->", pkt->type, (unsigned)pkt->size);
         pkt = pkt->next;
     }
-    puts("NULL");
+    printf("NULL");
 }
 
 gnrc_pktsnip_t *srv6_pkt_init(uint16_t src_port, uint16_t dst_port, unsigned int num_segments, const void *payload, size_t payload_len)
