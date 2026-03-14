@@ -41,7 +41,7 @@ static msg_t _msg_q[QUEUE_SIZE];
 #define PACKET_THROUGHPUT_SIZE             512
 
 // The size of payloads when sending
-#define PACKET_NORMAL_SIZE                 100
+#define PACKET_NORMAL_SIZE                 10
 
 static char payload[PACKET_THROUGHPUT_SIZE] = "\0";
 
