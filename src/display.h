@@ -2,6 +2,7 @@
 #define _DISPLAY_H_
 
 #include "records.h"
+#include "configs/config_common.h"
 
 struct display_thread_args {
     struct record_list *stats_list;

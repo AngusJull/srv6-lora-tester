@@ -67,7 +67,7 @@ static inline unsigned int clamp_width(unsigned int value, unsigned int width)
 }
 
 // Draw to the display, providng all parameters that will be shown on the display
-void draw_display(int display_route_notif, unsigned int identifier, struct stats_record *stats)
+void draw_display(int display_route_notif, struct node_configuration *config, struct stats_record *stats)
 {
     static char text_buffer[MAX_STRLEN];
 
@@ -82,17 +82,32 @@ void draw_display(int display_route_notif, unsigned int identifier, struct stats
         // u8g2 draws downwards, so set cursor to after the first line on the display
         unsigned int cursor_y = font_height;
 
+        // Draw battery
+
         snprintf(text_buffer, sizeof(text_buffer), "%." STR(MAX_BAT_WIDTH) "dmV", clamp_width(stats->millivolts, MAX_BAT_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
 
-        snprintf(text_buffer, sizeof(text_buffer), "ID:%." STR(MAX_ID_WIDTH) "d", clamp_width(identifier, MAX_ID_WIDTH));
+        // Draw the configuration
+
+        snprintf(text_buffer, sizeof(text_buffer), "ID:%." STR(MAX_ID_WIDTH) "d", clamp_width(config->this_id, MAX_ID_WIDTH));
+        cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
+        snprintf(text_buffer, sizeof(text_buffer), "TOP:%." STR(MAX_ID_WIDTH) "d", clamp_width(config->topology_id, MAX_ID_WIDTH));
+        cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
+        snprintf(text_buffer, sizeof(text_buffer), "SR:%." STR(MAX_ID_WIDTH) "d", clamp_width(config->use_srv6, MAX_ID_WIDTH));
+        cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
+        snprintf(text_buffer, sizeof(text_buffer), "TP:%." STR(MAX_ID_WIDTH) "d", clamp_width(config->throughput_test, MAX_ID_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
 
-        // If there was recently something routed, display something on the display
+        next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
+
+        // Draw routing notification
+
         if (display_route_notif) {
             cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "|ROUTED|");
         }
         next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
+
+        // Draw interface stats
 
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "STATS");
         next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
@@ -125,7 +140,7 @@ static void *_display_loop(void *ctx)
             display_route_notif = 1;
         }
 
-        draw_display(display_route_notif, args->config->this_id, &stats);
+        draw_display(display_route_notif, args->config, &stats);
         // 4Hz refresh rate to not use up too much battery life, hopefully
         DEBUG("Display sleeping\n");
         ztimer_sleep(ZTIMER_MSEC, TIME_BETWEEN_DRAW_MS);
