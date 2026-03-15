@@ -33,7 +33,7 @@ def read_until_no_data(conn, timeout):
 
 
 def collect(port):
-    conn = serial.Serial(port, 115200, timeout=None)
+    conn = serial.Serial(port, 115200, timeout=0.1)
     print("Serial connection opened")
 
     # Give the conn some time to open

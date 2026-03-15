@@ -138,25 +138,28 @@ void print_record_list_json_array(struct record_list *list, void (*print_func)(v
     printf("]");
 }
 
-static void print_netstats(struct netstats *stats)
+static void print_netstats(char *prefix, struct netstats *stats)
 {
-    printf("{\"tx_cnt\":%" PRIu16
-           ",\"tx_byt\":%" PRIu32
-           ",\"rx_cnt\":%" PRIu16
-           ",\"rx_byt\":%" PRIu32 "}",
+    printf("\"%s_tx_cnt\":%" PRIu16
+           ",\"%s_tx_byt\":%" PRIu32
+           ",\"%s_rx_cnt\":%" PRIu16
+           ",\"%s_rx_byt\":%" PRIu32,
+           prefix,
            stats->tx_unicast_count,
+           prefix,
            stats->tx_bytes,
+           prefix,
            stats->rx_count,
+           prefix,
            stats->rx_bytes);
 }
 
 void print_stats_record(struct stats_record *record)
 {
-    printf("{\"time\":%" STAT_TIME_FMT ",\"mv\":%" PRIu16, record->time, record->millivolts);
-    printf(",\"l2\": ");
-    print_netstats(&record->l2);
-    printf(",\"l3\": ");
-    print_netstats(&record->l3);
+    printf("{\"time\":%" STAT_TIME_FMT ",\"mv\":%" PRIu16 ",", record->time, record->millivolts);
+    print_netstats("l2", &record->l2);
+    printf(",");
+    print_netstats("l3", &record->l3);
     printf("}");
 }
 
@@ -166,12 +169,14 @@ void print_capture_record(struct capture_record *record)
            ",\"ev_type\":%d"
            ",\"pkt_type\":%d"
            ",\"hdr_len\":%" PRIu16
-           ",\"pld_len\":%" PRIu16 "}",
+           ",\"pld_len\":%" PRIu16
+           ",\"seg_lft\":%u}",
            record->time,
            record->event_type,
            record->packet_type,
            record->headers_len,
-           record->payload_len);
+           record->payload_len,
+           record->segments_left);
 }
 
 void print_latency_record(struct latency_record *record)

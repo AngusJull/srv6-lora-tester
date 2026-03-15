@@ -13,7 +13,7 @@ def run_analysis():
         data = json.load(file)
 
     dataframes = transform_to_dataframe(data)
-    print(dataframes)
+    return dataframes
 
 
 def transform_to_dataframe(collected_data: list):
@@ -24,20 +24,35 @@ def transform_to_dataframe(collected_data: list):
 
     # Data is stored in the same way it comes off the board, reorganize into dataframes
     for collection in collected_data:
+        # Not sure how null gets into the json data
+        if collection is None:
+            continue
         for record_type in collection:
-            if record_type == "node_id":
+            if record_type in [
+                "node_id",
+                "topology_id",
+                "use_srv6",
+                "throughput_test",
+            ]:
                 continue
 
             if record_type not in dataframes:
                 dataframes[record_type] = polars.DataFrame()
 
+            # If missing this data, no need to add it
+            if len(collection[record_type]) == 0:
+                continue
+
             df = polars.DataFrame(collection[record_type])
             df = df.with_columns(node_id=collection["node_id"])
 
-            dataframes[record_type].vstack(df, in_place=True)
+            try:
+                dataframes[record_type].vstack(df, in_place=True)
+            except:
+                breakpoint()
 
     return dataframes
 
 
 if __name__ == "__main__":
-    run_analysis()
+    dataframes = run_analysis()
