@@ -1,8 +1,3 @@
-// Create a  thread with the same priority as others
-//
-// Thread should read configuration from its arguments, then send a packet using srv6 if specified.
-// Thread should then wait for a response. Upon receiving it, it puts some info into another TSRB and we can get that later
-
 #include "net/gnrc/ipv6/hdr.h"
 #include "net/gnrc/nettype.h"
 #include "net/gnrc/pkt.h"
@@ -28,14 +23,17 @@ static char _stack[THREAD_STACKSIZE_MEDIUM];
 #define QUEUE_SIZE 8
 static msg_t _msg_q[QUEUE_SIZE];
 
+// How long to wait when starting up before starting to send
+#define SENDER_STARTUP_TIMEOUT             5000
+
 // How many milliseconds to wait before sender assumes the receiver didn't get their message
 #define SENDER_NORMAL_RESPONSE_TIMEOUT     10000
 
 // How many milliseconds to wait when sending larger packets (adds a lot of delay)
 #define SENDER_THROUGHPUT_RESPONSE_TIMEOUT 20000
 
-// How long to wait after getting a response when sending normally
-#define SENDER_WAIT_TIMEOUT                0
+// How long to wait after getting a response when sending. Sending too fast can cause problems it seems
+#define SENDER_WAIT_TIMEOUT                2000
 
 // A really big packet when doing throughput things
 #define PACKET_THROUGHPUT_SIZE             512
@@ -267,6 +265,8 @@ static void *_sender_loop(void *ctx)
 {
     struct sendrecv_thread_args *args = ctx;
 
+    // Give time for the rest of the network to come online before sending, and to allow configuration
+    ztimer_sleep(ZTIMER_MSEC, SENDER_STARTUP_TIMEOUT);
     while (1) {
         ztimer_now_t start = ztimer_now(ZTIMER_MSEC);
         send(get_node_traffic_config(args->config)->dest_id, args->config);
