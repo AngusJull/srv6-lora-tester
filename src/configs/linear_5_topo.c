@@ -25,7 +25,6 @@ static struct forwarding_entry _fib[] = {
     { .install_id = 2, .dest_id = 1, .next_hop_id = 1 },
     { .install_id = 2, .dest_id = 3, .next_hop_id = 3 },
 
-    // 4 -> 3 -> 2 -> 1 -> 0
     { .install_id = 3, .dest_id = 4, .next_hop_id = 4 },
     { .install_id = 3, .dest_id = 0, .next_hop_id = 2 },
     { .install_id = 3, .dest_id = 2, .next_hop_id = 2 },

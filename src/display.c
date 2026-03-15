@@ -11,8 +11,8 @@
 #include "records.h"
 #include "display.h"
 
-#define TIME_BETWEEN_DRAW_MS       200
-#define MAX_TIME_SINCE_CAPTURED_MS 2000
+#define TIME_BETWEEN_DRAW_MS       100
+#define MAX_TIME_SINCE_CAPTURED_MS 500
 
 #define DISPLAY_DEACTIVATE_PIN     GPIO_PIN(0, 36) // OLED Power Control
 #define DISPLAY_RST_PIN            GPIO_PIN(0, 21) // OLED Reset
@@ -87,11 +87,13 @@ void draw_display(int display_route_notif, struct node_configuration *config, st
         snprintf(text_buffer, sizeof(text_buffer), "%." STR(MAX_BAT_WIDTH) "dmV", clamp_width(stats->millivolts, MAX_BAT_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
 
+        next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
+
         // Draw the configuration
 
         snprintf(text_buffer, sizeof(text_buffer), "ID:%." STR(MAX_ID_WIDTH) "d", clamp_width(config->this_id, MAX_ID_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
-        snprintf(text_buffer, sizeof(text_buffer), "TOP:%." STR(MAX_ID_WIDTH) "d", clamp_width(config->topology_id, MAX_ID_WIDTH));
+        snprintf(text_buffer, sizeof(text_buffer), "TO:%." STR(MAX_ID_WIDTH) "d", clamp_width(config->topology_id, MAX_ID_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
         snprintf(text_buffer, sizeof(text_buffer), "SR:%." STR(MAX_ID_WIDTH) "d", clamp_width(config->use_srv6, MAX_ID_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
