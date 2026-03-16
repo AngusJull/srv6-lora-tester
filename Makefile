@@ -59,6 +59,8 @@ USEMODULE += gnrc_ipv6_nib_router
 USEMODULE += gnrc_srv6_srh
 # use IEEE802154 for sx126x instead of LoRa or RAW modes
 USEMODULE += sx126x_ieee802154
+# radio does not have acks built into hardware - software acks require a module
+USEMODULE += netdev_ieee802154_submac_soft_ack
 
 # use a pseudomodule added for this application, which will allow packets to be intercepted
 # when being sent from sixlowpan to the netif (impossible otherwise without adding an intermediate netif)

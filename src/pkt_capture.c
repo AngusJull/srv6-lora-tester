@@ -3,6 +3,7 @@
 #include "net/gnrc/pkt.h"
 #include "net/gnrc/pktbuf.h"
 #include "net/gnrc/srv6/srh.h"
+#include "net/ipv6/addr.h"
 #include "sys/errno.h"
 #include "net/gnrc/netapi.h"
 #include "net/gnrc/netreg.h"
@@ -12,6 +13,7 @@
 #include "debug.h"
 
 #include "stats.h"
+#include "board_config.h"
 #include "records.h"
 #include "pkt_capture.h"
 
@@ -40,6 +42,35 @@ static enum capture_packet_type packet_type(gnrc_pktsnip_t *pkt)
     return CAPTURE_PACKET_TYPE_UNDEF;
 }
 
+static void print_debug_packet(gnrc_pktsnip_t *pkt)
+{
+    while (pkt) {
+        switch (pkt->type) {
+        case GNRC_NETTYPE_IPV6_EXT: {
+            gnrc_srv6_srh_t *srh = pkt->data;
+            DEBUG("[rh, sz %u, seg_left %u, segs ", pkt->size, srh->seg_left);
+            if ((pkt->size - sizeof(*srh)) >= sizeof(ipv6_addr_t) * srh->seg_left) {
+#if ENABLE_DEBUG == 1
+                ipv6_addr_t *segments = (ipv6_addr_t *)(srh + 1);
+                ipv6_addrs_print(segments, srh->seg_left, ",");
+#endif
+            }
+            else {
+                DEBUG("(not enough data!)");
+            }
+            DEBUG("]");
+
+        } break;
+        default:
+            DEBUG("[typ %d, sz %u]", pkt->type, pkt->size);
+            break;
+        }
+        // Look at the next header
+        pkt = pkt->next;
+    }
+    DEBUG("\n");
+}
+
 struct capture_lengths {
     uint16_t headers_len;
     uint16_t payload_len;
@@ -49,7 +80,6 @@ static struct capture_lengths capture_headers_len(gnrc_pktsnip_t *pkt)
 {
     struct capture_lengths lengths = { 0 };
     while (pkt) {
-        DEBUG("Header type %d with length %u\n", pkt->type, pkt->size);
         switch (pkt->type) {
         case GNRC_NETTYPE_ICMPV6:
             // Fall-through
@@ -101,7 +131,6 @@ static void add_capture_record(struct record_list *capture_list, gnrc_pktsnip_t 
     if (pkt_type == CAPTURE_PACKET_TYPE_SRV6) {
         record.segments_left = segments_left(pkt);
     }
-    DEBUG("Got a packet with type %d, header length %d, payload length %d\n", pkt->type, lengths.headers_len, lengths.payload_len);
     record_list_insert(capture_list, (uint8_t *)&record, sizeof(record));
 }
 
@@ -113,13 +142,12 @@ static int check_pkt_netif(gnrc_pktsnip_t *pkt, int netif_pid)
         gnrc_netif_hdr_t *netif_hdr = pkt->data;
 
         // Remove all broadcast and multicast packets
-        if (netif_hdr->flags &
-            (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)) {
-            return 0;
-        }
-        // Only allow packets destined for our radio
-        if (netif_hdr->if_pid == netif_pid) {
-            return 1;
+        if (!(netif_hdr->flags &
+              (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST))) {
+            // Only allow packets destined for our radio
+            if (netif_hdr->if_pid == netif_pid) {
+                return 1;
+            }
         }
     }
     return 0;
@@ -164,6 +192,8 @@ static void *_pkt_capture_loop(void *ctx)
         switch (msg.type) {
         case GNRC_NETAPI_MSG_TYPE_RCV:
             // Recieving Data. We can ignore this because we can get all the info we need out of sending only (simplifies things)
+            DEBUG("Capture: Received ");
+            print_debug_packet(msg.content.ptr);
             gnrc_pktbuf_release(msg.content.ptr);
             break;
         case GNRC_NETAPI_MSG_TYPE_SND: {
@@ -174,6 +204,9 @@ static void *_pkt_capture_loop(void *ctx)
                 if (pkt->type == GNRC_NETTYPE_NETIF) {
                     pkt = pkt->next;
                 }
+                DEBUG("Capture: Sent ");
+                print_debug_packet(msg.content.ptr);
+
                 add_capture_record(args->capture_list, pkt, CAPTURE_EVENT_TYPE_SEND);
             }
             gnrc_pktbuf_release(msg.content.ptr);
