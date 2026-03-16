@@ -9,16 +9,6 @@
 
 #include "srv6.h"
 
-void debug_print_snip_chain(const char *msg, gnrc_pktsnip_t *pkt)
-{
-    printf("[SRv6 example] %s: snip chain: ", msg);
-    while (pkt) {
-        printf("[%d:%u]->", pkt->type, (unsigned)pkt->size);
-        pkt = pkt->next;
-    }
-    printf("NULL");
-}
-
 gnrc_pktsnip_t *srv6_pkt_init(uint16_t src_port, uint16_t dst_port, unsigned int num_segments, const void *payload, size_t payload_len)
 {
     // allocate udp request
@@ -118,7 +108,6 @@ gnrc_pktsnip_t *srv6_pkt_complete(gnrc_pktsnip_t *srv6_hdr, ipv6_addr_t *src)
 
 int srv6_pkt_send(gnrc_pktsnip_t *ip_hdr)
 {
-    debug_print_snip_chain("Before sending packet", ip_hdr);
     // send packet to IPv6 layer for transmission
     if (!gnrc_netapi_dispatch_send(GNRC_NETTYPE_IPV6, GNRC_NETREG_DEMUX_CTX_ALL, ip_hdr)) {
         printf("Failed to send packet\n");

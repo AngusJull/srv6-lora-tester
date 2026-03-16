@@ -41,18 +41,16 @@ static msg_t _msg_q[QUEUE_SIZE];
 // The size of payloads when sending
 #define PACKET_NORMAL_SIZE                 10
 
-static char payload[PACKET_THROUGHPUT_SIZE] = "\0";
-
-static uint8_t *get_payload(void)
+static void set_payload_seq_num(uint8_t *payload, uint32_t sequence_num)
 {
-    assert(PACKET_THROUGHPUT_SIZE >= PACKET_NORMAL_SIZE);
-    if (payload[0] == '\0') {
-        for (unsigned int i = 0; i < sizeof(payload); i++) {
-            payload[i] = 'A';
-        }
-        payload[sizeof(payload) - 1] = '\0';
-    }
-    return (uint8_t *)payload;
+    memcpy(payload, &sequence_num, sizeof(sequence_num));
+}
+
+static uint32_t get_payload_seq_num(uint8_t *payload)
+{
+    uint32_t res;
+    memcpy(&res, payload, sizeof(res));
+    return res;
 }
 
 static gnrc_pktsnip_t *build_pkt_ipv6(unsigned int dest_id, struct node_configuration *config, uint8_t *payload, size_t payload_size)
@@ -145,22 +143,17 @@ static gnrc_pktsnip_t *build_pkt_srv6(struct srv6_route *route, struct node_conf
     return pkt;
 }
 
-static int send(unsigned int dest_id, struct node_configuration *config)
+static int send(unsigned int dest_id, uint8_t *payload, size_t payload_size, struct node_configuration *config)
 {
     gnrc_pktsnip_t *pkt = NULL;
-
-    size_t payload_size = PACKET_NORMAL_SIZE;
-    if (config->throughput_test) {
-        payload_size = PACKET_THROUGHPUT_SIZE;
-    }
 
     // Check if there's an appropriate route to use
     struct srv6_route *route = get_srv6_route(config->this_id, dest_id, config);
     if (config->use_srv6 && route) {
-        pkt = build_pkt_srv6(route, config, get_payload(), payload_size);
+        pkt = build_pkt_srv6(route, config, payload, payload_size);
     }
     else {
-        pkt = build_pkt_ipv6(dest_id, config, get_payload(), payload_size);
+        pkt = build_pkt_ipv6(dest_id, config, payload, payload_size);
     }
 
     // We were unable to build a packet
@@ -203,7 +196,7 @@ void debug_print_pkt(gnrc_pktsnip_t *pkt)
 #endif
 }
 
-int is_pkt_valid(gnrc_pktsnip_t *pkt)
+bool is_pkt_valid(gnrc_pktsnip_t *pkt, bool check_sequence, uint32_t required_seq_num)
 {
     gnrc_pktsnip_t *next_hdr = pkt->next;
     if (next_hdr && next_hdr->type == GNRC_NETTYPE_UDP) {
@@ -213,15 +206,26 @@ int is_pkt_valid(gnrc_pktsnip_t *pkt)
                 next_hdr = next_hdr->next;
             }
             if (next_hdr->type == GNRC_NETTYPE_IPV6) {
-                return 1;
+                if (pkt->size > sizeof(uint32_t)) {
+                    uint32_t seq_num = get_payload_seq_num(pkt->data);
+                    if (!check_sequence || seq_num == required_seq_num) {
+                        return 1;
+                    }
+                    DEBUG("Didn't get the sequence number we were looking for, got %" PRIu32 "\n", seq_num);
+                }
+                else {
+                    DEBUG("Didn't get a sequence number\n");
+                }
             }
-            DEBUG("Didn't get an IPv6 packet as expected\n");
+            else {
+                DEBUG("Didn't get an IPv6 packet as expected\n");
+            }
         }
     }
     return 0;
 }
 
-gnrc_pktsnip_t *recv(unsigned int timeout)
+gnrc_pktsnip_t *recv(unsigned int timeout, bool check_sequence, uint32_t sequence_num)
 {
     msg_t msg;
     msg_t reply;
@@ -240,7 +244,7 @@ gnrc_pktsnip_t *recv(unsigned int timeout)
         switch (msg.type) {
         case GNRC_NETAPI_MSG_TYPE_RCV: {
             gnrc_pktsnip_t *pkt = msg.content.ptr;
-            if (is_pkt_valid(pkt)) {
+            if (is_pkt_valid(pkt, check_sequence, sequence_num)) {
                 return pkt;
             }
             break;
@@ -265,19 +269,34 @@ static void *_sender_loop(void *ctx)
 {
     struct sendrecv_thread_args *args = ctx;
 
+    // The payload might be pretty large so put it in data
+    static uint8_t payload[PACKET_THROUGHPUT_SIZE];
+    size_t payload_size = PACKET_THROUGHPUT_SIZE;
+    if (!args->config->throughput_test) {
+        payload_size = PACKET_NORMAL_SIZE;
+    }
+
+    // Fill the payload with junk just in case we want to inspect it - to confirm we are really sending data
+    memset(payload, 0xCC, sizeof(payload));
+    uint32_t sequence_num = 0;
+
+    unsigned int timeout = SENDER_NORMAL_RESPONSE_TIMEOUT;
+    if (args->config->throughput_test) {
+        timeout = SENDER_THROUGHPUT_RESPONSE_TIMEOUT;
+    }
+
     // Give time for the rest of the network to come online before sending, and to allow configuration
     ztimer_sleep(ZTIMER_MSEC, SENDER_STARTUP_TIMEOUT);
     while (1) {
-        ztimer_now_t start = ztimer_now(ZTIMER_MSEC);
-        send(get_node_traffic_config(args->config)->dest_id, args->config);
+        // Make sure we're always looking for a packet that's a response to this send, not something left over or duplicated
+        sequence_num++;
+        set_payload_seq_num(payload, sequence_num);
 
-        unsigned int timeout = SENDER_NORMAL_RESPONSE_TIMEOUT;
-        if (args->config->throughput_test) {
-            timeout = SENDER_THROUGHPUT_RESPONSE_TIMEOUT;
-        }
+        ztimer_now_t start = ztimer_now(ZTIMER_MSEC);
+        send(get_node_traffic_config(args->config)->dest_id, payload, payload_size, args->config);
 
         DEBUG("Starting receive\n");
-        gnrc_pktsnip_t *pkt = recv(timeout);
+        gnrc_pktsnip_t *pkt = recv(timeout, true, sequence_num);
         if (pkt == NULL) {
             DEBUG("No response, timed out\n");
             ztimer_now_t end = ztimer_now(ZTIMER_MSEC);
@@ -308,7 +327,7 @@ static void *_receiver_loop(void *ctx)
 
     while (1) {
         DEBUG("Waiting for an incoming packet\n");
-        gnrc_pktsnip_t *pkt = recv(0);
+        gnrc_pktsnip_t *pkt = recv(0, false, 0);
         DEBUG("Got a packet\n");
         debug_print_pkt(pkt);
 
@@ -327,17 +346,18 @@ static void *_receiver_loop(void *ctx)
         // but because it's a more general solution to can leave it
         int src_id = get_node_id(&ipv6_header->src, args->config);
 
-        // Make sure we release the packet's data
-        gnrc_pktbuf_release(pkt);
-
         if (src_id < 0) {
             // This might happen if there are misconfigured nodes, or other traffic
             DEBUG("Got a message from an unknown node\n");
         }
         else {
-            send(src_id, args->config);
+            // Send the exact same data back
+            send(src_id, pkt->data, pkt->size, args->config);
             DEBUG("Sent a response back\n");
         }
+
+        // Make sure we release the packet's data
+        gnrc_pktbuf_release(pkt);
     }
     return NULL;
 }
