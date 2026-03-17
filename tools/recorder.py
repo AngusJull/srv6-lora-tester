@@ -49,7 +49,11 @@ def collect(port):
         conn.reset_output_buffer()
         conn.write("\n".encode())
         # Read until a certain sequence (pretty much hardcoded to our current format), or until timeout (more general)
-        data = read_until_no_data(conn, 0.5).decode()
+        data = None
+        try:
+            data = read_until_no_data(conn, 0.5).decode()
+        except Exception as e:
+            print(f"Got exception [{e}] while decoding")
 
         if not data:
             print("Didn't get any data, sending command again")

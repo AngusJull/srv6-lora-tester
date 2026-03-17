@@ -108,9 +108,8 @@ static struct capture_lengths capture_headers_len(gnrc_pktsnip_t *pkt)
 // routing extension header
 static unsigned int segments_left(gnrc_pktsnip_t *pkt)
 {
-    if (pkt->next && pkt->type == GNRC_NETTYPE_IPV6_EXT) {
-        pkt = pkt->next;
-        gnrc_srv6_srh_t *srh = pkt->data;
+    if (pkt->next && pkt->next->type == GNRC_NETTYPE_IPV6_EXT) {
+        gnrc_srv6_srh_t *srh = pkt->next->data;
         return srh->seg_left;
     }
     return 0;
