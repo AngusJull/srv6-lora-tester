@@ -134,7 +134,6 @@ def avg_l2_size(capture_records):
         )
     )
 
-    # Calculate average L3 size so we know how much SRH has increased our packet size
     return (sums["hdr_len"][0] + sums["pld_len"][0]) / count
 
 
@@ -224,6 +223,7 @@ def print_analysis(latency_records, capture_records, stats_records):
     print(
         f"{'Overhead ((l2 bytes per l3 packet) / payload bytes':<50} {avg_l2_size(capture_records) / l3_payload_size(senders[0], capture_records)}"
     )
+    print(f"{'Average L2 packet size (bytes)':<50} {avg_l2_size(capture_records)}")
     print(
         f"{'Average rate of change in battery (mv/s)':<50} {avg_battery_change(stats_records)}"
     )
