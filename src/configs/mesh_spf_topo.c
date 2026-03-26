@@ -8,8 +8,7 @@
  *
  * Where nodes 0/2 send/recieve and nodes 1/3 send/recieve
  *
- * The SRv6 routes in this file are not calculated using SPF,
- * and show some advantages to using SRv6
+ * The routes in this file are all SPF, so SRv6 and IPv6 take the same path
 */
 
 #include "config_common.h"
@@ -17,8 +16,8 @@
 #define NUM_NODES 6
 
 static struct srv6_route _routes[] = {
-    { .source_id = 0, .dest_id = 2, .segments = "4 5" },
-    { .source_id = 2, .dest_id = 0, .segments = "5 4" },
+    { .source_id = 0, .dest_id = 2, .segments = "1" },
+    { .source_id = 2, .dest_id = 0, .segments = "1" },
     { .source_id = 1, .dest_id = 3, .segments = "" },
     { .source_id = 3, .dest_id = 1, .segments = "" }
 };
@@ -73,7 +72,7 @@ static struct traffic_configuration traffic_config[NUM_NODES] = {
     { .role = NODE_ROLE_FORWARD_ONLY },
 };
 
-struct topology_configuration mesh_topo = {
+struct topology_configuration mesh_spf_topo = {
     .addr_configs = addr_config,
     .traffic_configs = traffic_config,
     .srv6_config = &srv6_config,

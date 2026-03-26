@@ -206,10 +206,11 @@ def print_analysis(latency_records, capture_records, stats_records):
     senders = senders_list(latency_records)
     for sender in senders:
         print(f"For sender {sender}")
-        latency_val = latency(sender, 5, latency_records)
+        hops = int(input("Enter number of hops: "))
+        latency_val = latency(sender, hops, latency_records)
         print(f"{'  latency (seconds / hop)':<50} {latency_val}")
         throughput_val = throughput(
-            sender, 5, l3_payload_size(sender, capture_records), latency_records
+            sender, hops, l3_payload_size(sender, capture_records), latency_records
         )
         print(f"{'  throughput (hop * payload bytes / second)':<50} {throughput_val}")
 

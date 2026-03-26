@@ -12,6 +12,7 @@ enum topology {
     TOPOLOGY_LINEAR_3,
     TOPOLOGY_LINEAR_5,
     TOPOLOGY_MESH,
+    TOPOLOGY_MESH_SPF,
     TOPOLOGY_STAR,
     TOPOLOGY_NUM_TOPOLOGIES
 };
@@ -21,6 +22,7 @@ extern struct topology_configuration linear_2_topo;
 extern struct topology_configuration linear_5_topo;
 extern struct topology_configuration linear_3_topo;
 extern struct topology_configuration mesh_topo;
+extern struct topology_configuration mesh_spf_topo;
 extern struct topology_configuration star_topo;
 
 static struct topology_configuration *topology_array[TOPOLOGY_NUM_TOPOLOGIES] = {
@@ -28,6 +30,7 @@ static struct topology_configuration *topology_array[TOPOLOGY_NUM_TOPOLOGIES] = 
     [TOPOLOGY_LINEAR_3] = &linear_3_topo,
     [TOPOLOGY_LINEAR_5] = &linear_5_topo,
     [TOPOLOGY_MESH] = &mesh_topo,
+    [TOPOLOGY_MESH_SPF] = &mesh_spf_topo,
     [TOPOLOGY_STAR] = &star_topo,
 };
 
