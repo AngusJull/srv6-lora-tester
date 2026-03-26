@@ -7,8 +7,6 @@
 
 #include "records.h"
 
-#define RECORD_LIST_INIT_CAPACITY 4
-
 // Initalize a new list with no elements
 void record_list_init(struct record_list *list, uint8_t *backing, unsigned int backing_size, unsigned int record_size)
 {
@@ -16,6 +14,7 @@ void record_list_init(struct record_list *list, uint8_t *backing, unsigned int b
     mutex_lock(&list->mutex);
 
     list->record_size = record_size;
+    list->write_idx = 0;
     list->len = 0;
     list->capacity = backing_size / record_size;
     list->backing = backing;
@@ -32,19 +31,15 @@ int record_list_insert(struct record_list *list, uint8_t *record, size_t record_
     int ret = 0;
     mutex_lock(&list->mutex);
 
-    // If we end up out of space, just ignore. Silent so we can still get information off the boards
-    if (list->len >= list->capacity) {
-        ret = 1;
-    }
-    else {
-        // Actually put the element on the end, but consistently use the list as if it goes
-        // on the front so just use that terminology
-        memcpy(&list->backing[list->len * list->record_size], record, record_size);
+    // Overwrite the oldest information, if full
+    memcpy(&list->backing[list->write_idx * list->record_size], record, record_size);
+
+    list->write_idx = (list->write_idx + 1) % list->capacity;
+    if (list->len < list->capacity) {
         list->len++;
     }
 
     mutex_unlock(&list->mutex);
-
     return ret;
 }
 
@@ -55,12 +50,19 @@ void record_list_iter(struct record_list *list, int (*func)(uint8_t *record, siz
 {
     mutex_lock(&list->mutex);
 
-    // Iterate backwards so we see the newest element first and oldest element last,
-    // since all other operations start at the end or modify the end
-    for (unsigned int i = list->len; i-- > 0;) {
-        if (func(&list->backing[i * list->record_size], list->record_size, ctx)) {
+    unsigned int idx = list->write_idx;
+    unsigned int len = list->len;
+    while (len > 0) {
+        if (idx == 0) {
+            idx = list->capacity - 1;
+        }
+        else {
+            idx -= 1;
+        }
+        if (func(&list->backing[idx * list->record_size], list->record_size, ctx)) {
             break;
         }
+        len -= 1;
     }
 
     mutex_unlock(&list->mutex);
@@ -74,8 +76,15 @@ int record_list_first(struct record_list *list, uint8_t *record, size_t record_s
     int ret = 0;
     mutex_lock(&list->mutex);
 
-    if (list->len) {
-        memcpy(record, &list->backing[(list->len - 1) * list->record_size], record_size);
+    if (list->len > 0) {
+        unsigned int idx = list->write_idx;
+        if (idx == 0) {
+            idx = list->capacity - 1;
+        }
+        else {
+            idx -= 1;
+        }
+        memcpy(record, &list->backing[idx * list->record_size], record_size);
     }
     else {
         ret = 1;

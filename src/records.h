@@ -45,7 +45,8 @@ struct capture_record {
     uint16_t payload_len;
     uint8_t event_type;
     uint8_t packet_type;
-    uint8_t segments_left;
+    uint8_t segments_left; // The number of segments left, if this packet is an SRv6 packet
+    int8_t dest_id;        // The current destination ID for this packet, if it is an IPv6 or SRv6 packet
 };
 
 enum latency_record_type {
@@ -59,10 +60,11 @@ struct latency_record {
     uint8_t type;
 };
 
-// Record list, implementing the very basics of a vector, pretty much
+// Stores multiple records
 struct record_list {
     mutex_t mutex;
     uint8_t *backing;
+    unsigned int write_idx;
     unsigned int len;
     unsigned int capacity;
     size_t record_size;
