@@ -17,8 +17,8 @@
 #define NUM_NODES 6
 
 static struct srv6_route _routes[] = {
-    { .source_id = 0, .dest_id = 2, .segments = "4 5" },
-    { .source_id = 2, .dest_id = 0, .segments = "5 4" },
+    { .source_id = 0, .dest_id = 2, .segments = "4" },
+    { .source_id = 2, .dest_id = 0, .segments = "4" },
     { .source_id = 1, .dest_id = 3, .segments = "" },
     { .source_id = 3, .dest_id = 1, .segments = "" }
 };
@@ -35,14 +35,17 @@ static struct forwarding_entry _fib[] = {
     { .install_id = 2, .dest_id = 0, .next_hop_id = 1 },
     { .install_id = 2, .dest_id = 1, .next_hop_id = 1 },
     { .install_id = 2, .dest_id = 5, .next_hop_id = 5 },
+    { .install_id = 2, .dest_id = 4, .next_hop_id = 5 },
 
     { .install_id = 3, .dest_id = 1, .next_hop_id = 1 },
 
     { .install_id = 4, .dest_id = 0, .next_hop_id = 0 },
     { .install_id = 4, .dest_id = 5, .next_hop_id = 5 },
+    { .install_id = 4, .dest_id = 2, .next_hop_id = 5 },
 
     { .install_id = 5, .dest_id = 2, .next_hop_id = 2 },
     { .install_id = 5, .dest_id = 4, .next_hop_id = 4 },
+    { .install_id = 5, .dest_id = 0, .next_hop_id = 4 },
 };
 
 static struct address_configuration addr_config[NUM_NODES] = {
@@ -66,9 +69,9 @@ static struct forwarding_configuration forwarding_config = {
 
 static struct traffic_configuration traffic_config[NUM_NODES] = {
     { .role = NODE_ROLE_SENDER, .dest_id = 2 },
-    { .role = NODE_ROLE_SENDER, .dest_id = 3 },
+    { .role = NODE_ROLE_RECIEVER, .dest_id = 3 },
     { .role = NODE_ROLE_RECIEVER, .dest_id = 0 },
-    { .role = NODE_ROLE_RECIEVER, .dest_id = 1 },
+    { .role = NODE_ROLE_SENDER, .dest_id = 1 },
     { .role = NODE_ROLE_FORWARD_ONLY },
     { .role = NODE_ROLE_FORWARD_ONLY },
 };

@@ -209,6 +209,7 @@ bool is_pkt_valid(gnrc_pktsnip_t *pkt, bool check_sequence, uint32_t required_se
                 if (pkt->size > sizeof(uint32_t)) {
                     uint32_t seq_num = get_payload_seq_num(pkt->data);
                     if (!check_sequence || seq_num == required_seq_num) {
+                        DEBUG("Got the sequence number we were looking for, got %" PRIu32 "\n", seq_num);
                         return 1;
                     }
                     DEBUG("Didn't get the sequence number we were looking for, got %" PRIu32 "\n", seq_num);
