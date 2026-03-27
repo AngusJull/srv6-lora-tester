@@ -12,39 +12,45 @@
 #include "records.h"
 #include "display.h"
 
-#define TIME_BETWEEN_DRAW_MS          50
-#define MAX_TIME_SINCE_CAPTURED_MS    500
+#define TIME_BETWEEN_DRAW_MS             50
+#define MAX_TIME_SINCE_CAPTURED_MS       500
 
-#define DISPLAY_DEACTIVATE_PIN        GPIO_PIN(0, 36) // OLED Power Control
-#define DISPLAY_RST_PIN               GPIO_PIN(0, 21) // OLED Reset
+#define DISPLAY_DEACTIVATE_PIN           GPIO_PIN(0, 36) // OLED Power Control
+#define DISPLAY_RST_PIN                  GPIO_PIN(0, 21) // OLED Reset
 
-#define DISPLAY_I2C                   0    // I2C Line, could be made into a
-#define DISPLAY_I2C_ADDR              0x3c // I2C Address
+#define DISPLAY_I2C                      0    // I2C Line, could be made into a
+#define DISPLAY_I2C_ADDR                 0x3c // I2C Address
 
 // Maximum character widths for integers
-#define MAX_STRLEN                    30
-#define MAX_BAT_WIDTH                 4 // Maximum value for battery, to prevent using more than four chars
-#define MAX_ID_WIDTH                  2
-#define MAX_BYTE_WIDTH                5
-#define MAX_COUNT_WIDTH               5
+#define MAX_STRLEN                       30
+#define MAX_BAT_WIDTH                    4 // Maximum value for battery, to prevent using more than four chars
+#define MAX_ID_WIDTH                     2
+#define MAX_BYTE_WIDTH                   5
+#define MAX_COUNT_WIDTH                  5
 
-// Routing notification settings
-#define ROUTE_NOTIF_COMPLETE_SEGMENTS 7 // The max number of arrow segments or movements to make when displaying a routing notification
-#define ROUTE_NOTIF_TIME_PER_SEGMENT  50
-#define ROUTE_NOTIF_IN_PROGRESS_TIME  (ROUTE_NOTIF_COMPLETE_SEGMENTS * ROUTE_NOTIF_TIME_PER_SEGMENT)
-#define ROUTE_NOTIF_CLEAR_AFTER_MS    5000
+// Routing notification settings for l3 packets
+#define ROUTE_NOTIF_L3_COMPLETE_SEGMENTS 3 // The max number of arrow segments or movements to make when displaying a routing notification
+#define ROUTE_NOTIF_L3_TIME_PER_SEGMENT  50
+#define ROUTE_NOTIF_L3_IN_PROGRESS_TIME  (ROUTE_NOTIF_L3_COMPLETE_SEGMENTS * ROUTE_NOTIF_L3_TIME_PER_SEGMENT)
 
-#define S_TO_MS                       1000
+// For l2 packest
+#define ROUTE_NOTIF_L2_COMPLETE_SEGMENTS 2 // The max number of arrow segments or movements to make when displaying a routing notification
+#define ROUTE_NOTIF_L2_TIME_PER_SEGMENT  75
+#define ROUTE_NOTIF_L2_IN_PROGRESS_TIME  (ROUTE_NOTIF_L2_COMPLETE_SEGMENTS * ROUTE_NOTIF_L2_TIME_PER_SEGMENT)
+
+#define ROUTE_NOTIF_CLEAR_AFTER_MS       5000
+
+#define S_TO_MS                          1000
 
 // Allow integer widths to be used in string formatting
-#define _STRINGIFY(x)                 #x
+#define _STRINGIFY(x)                    #x
 // Force expansion of the enclosed macro
-#define STR(macro)                    _STRINGIFY(macro)
+#define STR(macro)                       _STRINGIFY(macro)
 
-#define DEFAULT_PAD_X                 3
-#define DEFAULT_PAD_Y                 3
+#define DEFAULT_PAD_X                    3
+#define DEFAULT_PAD_Y                    3
 
-#define DISPLAY_THREAD_PRIORITY       (THREAD_PRIORITY_MAIN - 1)
+#define DISPLAY_THREAD_PRIORITY          (THREAD_PRIORITY_MAIN - 1)
 static char _stack[THREAD_STACKSIZE_MEDIUM];
 
 // For creating formatted strings for display (and using the stored string immediately)
@@ -80,49 +86,73 @@ static inline unsigned int clamp_width(unsigned int value, unsigned int width)
     return value;
 }
 
-struct routing_notif_substate {
+struct routing_notif_l3_substate {
     bool display;
     unsigned int progress; // Progress of the animation, between 0 and 1000
     unsigned int segs;
     int dest;
 };
 
+struct routing_notif_l2_substate {
+    bool display;
+    unsigned int progress;
+    // For now, no extra information for L2. Just show progress bar
+};
+
 struct routing_notif_state {
-    struct routing_notif_substate l3_in;
-    struct routing_notif_substate l3_out;
+    struct routing_notif_l3_substate l3_in;
+    struct routing_notif_l3_substate l3_out;
+    struct routing_notif_l2_substate l2_in;
+    struct routing_notif_l2_substate l2_out;
 };
 
 struct process_routing_state_inner_ctx {
     stat_time_t now;
     bool l3_in_complete;
     bool l3_out_complete;
+    bool l2_in_complete;
+    bool l2_out_complete;
     struct routing_notif_state *routing;
 };
 
-static int process_routing_substate(struct routing_notif_substate *substate, struct capture_record *record, stat_time_t now)
+static int process_routing_l3_substate(struct routing_notif_l3_substate *substate, struct capture_record *record, stat_time_t now)
 {
     if (record->time < now) {
         stat_time_t diff = now - record->time;
         unsigned int progress = diff;
-        if (progress > ROUTE_NOTIF_IN_PROGRESS_TIME) {
-            progress = ROUTE_NOTIF_IN_PROGRESS_TIME;
+        if (progress > ROUTE_NOTIF_L3_IN_PROGRESS_TIME) {
+            progress = ROUTE_NOTIF_L3_IN_PROGRESS_TIME;
         }
         // Don't show when too old
         substate->display = diff < ROUTE_NOTIF_CLEAR_AFTER_MS;
         substate->progress = progress;
         substate->dest = record->dest_id; //NOLINT. Prevent linter from suggesting we turn into unsigned char first to preserve bits
         substate->segs = record->segments_left;
+
+        return 1;
     }
-    return 1;
+    return 0;
+}
+
+static int process_routing_l2_substate(struct routing_notif_l2_substate *substate, struct capture_record *record, stat_time_t now)
+{
+    if (record->time < now) {
+        stat_time_t diff = now - record->time;
+        unsigned int progress = diff;
+        if (progress > ROUTE_NOTIF_L2_IN_PROGRESS_TIME) {
+            progress = ROUTE_NOTIF_L2_IN_PROGRESS_TIME;
+        }
+        substate->display = diff < ROUTE_NOTIF_CLEAR_AFTER_MS;
+        substate->progress = progress;
+
+        return 1;
+    }
+    return 0;
 }
 
 static int process_routing_state_inner(uint8_t *record_data, size_t record_size, void *ctx)
 {
     struct process_routing_state_inner_ctx *context = ctx;
-    if (context->l3_in_complete && context->l3_out_complete) {
-        // Stop iteration because we found records to use for each
-        return 1;
-    }
 
     // Make sure we got the right type of data
     assert(record_size == sizeof(struct capture_record));
@@ -130,59 +160,79 @@ static int process_routing_state_inner(uint8_t *record_data, size_t record_size,
     memcpy(&record, record_data, record_size);
 
     // Only interested in L3 packets
-    if (record.packet_type == CAPTURE_PACKET_TYPE_SRV6 || record.packet_type == CAPTURE_PACKET_TYPE_IPV6) {
+    switch (record.packet_type) {
+    case CAPTURE_PACKET_TYPE_SRV6:
+        // Fall-through
+    case CAPTURE_PACKET_TYPE_IPV6:
         // Check what type of record this is, make sure we don't have it already
         if (!context->l3_out_complete && record.event_type == CAPTURE_EVENT_TYPE_SEND) {
-            context->l3_out_complete = process_routing_substate(&context->routing->l3_out, &record, context->now);
+            context->l3_out_complete = process_routing_l3_substate(&context->routing->l3_out, &record, context->now);
         }
         else if (!context->l3_in_complete && record.event_type == CAPTURE_EVENT_TYPE_RECV) {
-            context->l3_in_complete = process_routing_substate(&context->routing->l3_in, &record, context->now);
+            context->l3_in_complete = process_routing_l3_substate(&context->routing->l3_in, &record, context->now);
         }
+        break;
+    case CAPTURE_PACKET_TYPE_SIXLOWPAN:
+        if (!context->l2_out_complete && record.event_type == CAPTURE_EVENT_TYPE_SEND) {
+            context->l2_out_complete = process_routing_l2_substate(&context->routing->l2_out, &record, context->now);
+        }
+        else if (!context->l2_in_complete && record.event_type == CAPTURE_EVENT_TYPE_RECV) {
+            context->l2_in_complete = process_routing_l2_substate(&context->routing->l2_in, &record, context->now);
+        }
+        break;
+    default:
+        break;
     }
 
-    return context->l3_in_complete && context->l3_out_complete;
+    return context->l3_in_complete && context->l3_out_complete && context->l2_in_complete && context->l2_out_complete;
 }
+
 static void process_routing_state(struct routing_notif_state *routing, struct record_list *capture_records)
 {
     routing->l3_in.display = false;
     routing->l3_out.display = false;
+    routing->l2_in.display = false;
+    routing->l2_out.display = false;
 
     struct process_routing_state_inner_ctx context = {
         .now = ztimer_now(ZTIMER_MSEC),
         .l3_in_complete = false,
         .l3_out_complete = false,
+        .l2_in_complete = false,
+        .l2_out_complete = false,
         .routing = routing,
     };
     record_list_iter(capture_records, process_routing_state_inner, &context);
 }
 
-static void draw_route_notif_arrow(struct routing_notif_substate *substate, unsigned int cursor_x, unsigned int cursor_y)
+static unsigned int draw_route_notif_arrow(bool display, unsigned int progress, unsigned int progress_per_seg, unsigned int total_segs, unsigned int cursor_x, unsigned int cursor_y)
 {
     // Draw routing arrows
-    cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "[");
     unsigned int chars_used = 0;
-    if (substate->display) {
-        chars_used += substate->progress / ROUTE_NOTIF_TIME_PER_SEGMENT;
+    unsigned int offset_x = 0;
+    if (display) {
+        chars_used += progress / progress_per_seg;
         for (unsigned int i = 0; i < chars_used; i++) {
-            cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "-");
+            offset_x += u8g2_DrawStr(&u8g2, cursor_x + offset_x, cursor_y, "-");
         }
         chars_used += 1;
-        cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, ">");
+        offset_x += u8g2_DrawStr(&u8g2, cursor_x + offset_x, cursor_y, ">");
     }
     // Fill rest of bar in with empty spaces (account for arrow head and arrow segments)
-    for (unsigned int i = 0; i < ((ROUTE_NOTIF_COMPLETE_SEGMENTS + 1) - chars_used); i++) {
-        cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, " ");
+    for (unsigned int i = 0; i < ((total_segs + 1) - chars_used); i++) {
+        offset_x += u8g2_DrawStr(&u8g2, cursor_x + offset_x, cursor_y, " ");
     }
-    u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "]");
+
+    return offset_x;
 }
 
-static void draw_route_notif_info(struct routing_notif_substate *substate, unsigned int cursor_x, unsigned int cursor_y)
+static void draw_route_notif_info(bool display, int dest, unsigned int segs, unsigned int cursor_x, unsigned int cursor_y)
 {
-    if (substate->display) {
-        snprintf(text_buffer, sizeof(text_buffer), "DEST %d", substate->dest);
+    if (display) {
+        snprintf(text_buffer, sizeof(text_buffer), "DEST %d", dest);
         u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer);
         cursor_y += LINE_SPACE;
-        snprintf(text_buffer, sizeof(text_buffer), "SEGS %u", substate->segs);
+        snprintf(text_buffer, sizeof(text_buffer), "SEGS %u", segs);
         u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer);
     }
     else {
@@ -192,11 +242,25 @@ static void draw_route_notif_info(struct routing_notif_substate *substate, unsig
     }
 }
 
-static void draw_route_notif(struct routing_notif_substate *substate, unsigned int cursor_x, unsigned int cursor_y)
+static void draw_route_notif(struct routing_notif_l3_substate *l3_substate, struct routing_notif_l2_substate *l2_substate, unsigned int cursor_x, unsigned int cursor_y)
 {
-    draw_route_notif_arrow(substate, cursor_x, cursor_y);
+    unsigned int arrow_row_x = cursor_x + u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "[");
+    arrow_row_x += draw_route_notif_arrow(l2_substate->display, l2_substate->progress,
+                                          ROUTE_NOTIF_L2_TIME_PER_SEGMENT,
+                                          ROUTE_NOTIF_L2_COMPLETE_SEGMENTS,
+                                          arrow_row_x,
+                                          cursor_y);
+    arrow_row_x += u8g2_DrawStr(&u8g2, arrow_row_x, cursor_y, "|");
+    // Draw the two arrows one after another
+    arrow_row_x += draw_route_notif_arrow(l3_substate->display, l3_substate->progress,
+                                          ROUTE_NOTIF_L3_TIME_PER_SEGMENT,
+                                          ROUTE_NOTIF_L3_COMPLETE_SEGMENTS,
+                                          arrow_row_x,
+                                          cursor_y);
+    u8g2_DrawStr(&u8g2, arrow_row_x, cursor_y, "]");
+
     cursor_y += LINE_SPACE;
-    draw_route_notif_info(substate, cursor_x, cursor_y);
+    draw_route_notif_info(l3_substate->display, l3_substate->dest, l3_substate->segs, cursor_x, cursor_y);
 }
 
 // Draw to the display, providng all parameters that will be shown on the display
@@ -233,10 +297,10 @@ static void draw_display(struct routing_notif_state *routing, struct stats_recor
         unsigned int half_width = width / 2;
 
         u8g2_DrawStr(&u8g2, 0, cursor_y, "IN");
-        draw_route_notif(&routing->l3_in, 0, cursor_y + LINE_SPACE);
+        draw_route_notif(&routing->l3_in, &routing->l2_in, 0, cursor_y + LINE_SPACE);
 
         u8g2_DrawStr(&u8g2, half_width, cursor_y, "OUT");
-        draw_route_notif(&routing->l3_out, half_width, cursor_y + LINE_SPACE);
+        draw_route_notif(&routing->l3_out, &routing->l2_out, half_width, cursor_y + LINE_SPACE);
     } while (u8g2_NextPage(&u8g2));
 }
 
