@@ -14,16 +14,19 @@
 #define ENABLE_DEBUG 0
 #include "debug.h"
 
-#define MAX_NUM_STATS   1800
-#define MAX_NUM_CAPTURE 7200
-#define MAX_NUM_LATENCY 3600
+#define MAX_NUM_STATS           1800
+#define MAX_NUM_CAPTURE         7200
+#define MAX_NUM_DISPLAY_CAPTURE 15
+#define MAX_NUM_LATENCY         3600
 
 uint8_t stats_list_backing[MAX_NUM_STATS * sizeof(struct stats_record)];
 uint8_t capture_list_backing[MAX_NUM_CAPTURE * sizeof(struct capture_record)];
+uint8_t display_capture_list_backing[MAX_NUM_DISPLAY_CAPTURE * sizeof(struct capture_record)];
 uint8_t latency_list_backing[MAX_NUM_LATENCY * sizeof(struct latency_record)];
 
 static struct record_list stats_list;
 static struct record_list capture_list;
+static struct record_list display_capture_list;
 static struct record_list latency_list;
 
 // Keep the configuration in a global so we have the option to modify it in a shell command
@@ -49,11 +52,12 @@ int main(void)
 
     record_list_init(&stats_list, stats_list_backing, sizeof(stats_list_backing), sizeof(struct stats_record));
     record_list_init(&capture_list, capture_list_backing, sizeof(capture_list_backing), sizeof(struct capture_record));
+    record_list_init(&display_capture_list, display_capture_list_backing, sizeof(capture_list_backing), sizeof(struct capture_record));
     record_list_init(&latency_list, latency_list_backing, sizeof(latency_list_backing), sizeof(struct latency_record));
 
     init_stats_thread(&(struct stats_thread_args){ .stats_list = &stats_list });
-    init_display_thread(&(struct display_thread_args){ .stats_list = &stats_list, .capture_list = &capture_list, .config = &config });
-    init_pkt_capture_thread(&(struct pkt_capture_thread_args){ .capture_list = &capture_list });
+    init_display_thread(&(struct display_thread_args){ .stats_list = &stats_list, .display_capture_list = &display_capture_list, .config = &config });
+    init_pkt_capture_thread(&(struct pkt_capture_thread_args){ .capture_list = &capture_list, .display_capture_list = &display_capture_list, .config = &config });
     init_sendrecv_thread(&(struct sendrecv_thread_args){ .latency_list = &latency_list, .config = &config });
 
     (void)printf("Threads started, running shell\n");

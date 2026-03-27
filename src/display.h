@@ -6,7 +6,7 @@
 
 struct display_thread_args {
     struct record_list *stats_list;
-    struct record_list *capture_list;
+    struct record_list *display_capture_list;
     struct node_configuration *config;
 };
 

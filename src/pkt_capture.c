@@ -4,6 +4,7 @@
 #include "net/gnrc/pktbuf.h"
 #include "net/gnrc/srv6/srh.h"
 #include "net/ipv6/addr.h"
+#include "src/configs/config_common.h"
 #include "sys/errno.h"
 #include "net/gnrc/netapi.h"
 #include "net/gnrc/netreg.h"
@@ -61,6 +62,10 @@ static void print_debug_packet(gnrc_pktsnip_t *pkt)
             DEBUG("]");
 
         } break;
+        case GNRC_NETTYPE_NETIF: {
+            gnrc_netif_hdr_t *netif = pkt->data;
+            DEBUG("[nif, sz %u, if %u]", pkt->size, netif->if_pid);
+        } break;
         default:
             DEBUG("[typ %d, sz %u]", pkt->type, pkt->size);
             break;
@@ -115,7 +120,16 @@ static unsigned int segments_left(gnrc_pktsnip_t *pkt)
     return 0;
 }
 
-static void add_capture_record(struct record_list *capture_list, gnrc_pktsnip_t *pkt, enum capture_event_type type)
+static int dest_id(gnrc_pktsnip_t *pkt, struct node_configuration *config)
+{
+    if (pkt->type == GNRC_NETTYPE_IPV6) {
+        ipv6_hdr_t *hdr = pkt->data;
+        return get_node_id(&hdr->dst, config);
+    }
+    return -1;
+}
+
+static void add_capture_record(struct record_list *capture_list, gnrc_pktsnip_t *pkt, enum capture_event_type type, struct node_configuration *config)
 {
     // Can find some examples of how to work on packets in gnrc_ipv6.c:760
     // Packet snips are ordered from lowest layer to highest layer when sending, and from highest layer to lowest layer when recieving
@@ -126,26 +140,35 @@ static void add_capture_record(struct record_list *capture_list, gnrc_pktsnip_t 
                                      .headers_len = lengths.headers_len,
                                      .payload_len = lengths.payload_len,
                                      .time = ztimer_now(ZTIMER_MSEC),
-                                     .segments_left = 0 };
+                                     .segments_left = 0,
+                                     .dest_id = -1 };
+
     if (pkt_type == CAPTURE_PACKET_TYPE_SRV6) {
         record.segments_left = segments_left(pkt);
+    }
+    if (pkt_type == CAPTURE_PACKET_TYPE_SRV6 || pkt_type == CAPTURE_PACKET_TYPE_IPV6) {
+        record.dest_id = dest_id(pkt, config);
     }
     record_list_insert(capture_list, (uint8_t *)&record, sizeof(record));
 }
 
 // Make sure the packet is destined for an acceptable network interface and has a netif snip on it
-static int check_pkt_netif(gnrc_pktsnip_t *pkt, int netif_pid)
+static int dont_filter(gnrc_pktsnip_t *pkt, int netif_pid)
 {
-    // It seems like all IPv6 and sixlowpan packets start with a netif header to describe their destination
-    if (pkt->type == GNRC_NETTYPE_NETIF) {
+    // It seems like all IPv6 and sixlowpan packets start with a netif header to describe their destination. Or end in one if recieved
+    pkt = gnrc_pktsnip_search_type(pkt, GNRC_NETTYPE_NETIF);
+    if (pkt) {
         gnrc_netif_hdr_t *netif_hdr = pkt->data;
 
         // Remove all broadcast and multicast packets
         if (!(netif_hdr->flags &
               (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST))) {
-            // Only allow packets destined for our radio
-            if (netif_hdr->if_pid == netif_pid) {
-                return 1;
+            // Remove ICMP packets that we pick up at the IPv6 level before they have a netif header
+            if (!gnrc_pktsnip_search_type(pkt, GNRC_NETTYPE_ICMPV6)) {
+                // Only allow packets destined for our radio
+                if (netif_hdr->if_pid == netif_pid) {
+                    return 1;
+                }
             }
         }
     }
@@ -166,11 +189,15 @@ static void *_pkt_capture_loop(void *ctx)
     reply.content.value = -ENOTSUP;
 
     msg_init_queue(_msg_q, QUEUE_SIZE);
+
     gnrc_netreg_entry_t prenetif_reg = GNRC_NETREG_ENTRY_INIT_PID(GNRC_NETREG_DEMUX_CTX_ALL,
                                                                   thread_getpid());
 
     gnrc_netreg_entry_t sixlowpan_reg = GNRC_NETREG_ENTRY_INIT_PID(GNRC_NETREG_DEMUX_CTX_ALL,
                                                                    thread_getpid());
+
+    gnrc_netreg_entry_t ipv6_reg = GNRC_NETREG_ENTRY_INIT_PID(GNRC_NETREG_DEMUX_CTX_ALL,
+                                                              thread_getpid());
 
     // On line 292 of gnrc_ipv6.c we see `if (!gnrc_netapi_dispatch_send(GNRC_NETTYPE_SIXLOWPAN, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {`
     // when sending IPv6 packets
@@ -185,28 +212,35 @@ static void *_pkt_capture_loop(void *ctx)
         DEBUG("Failed to register for sixlowpan_prenetif packets\n");
     }
 
+    if (gnrc_netreg_register(GNRC_NETTYPE_IPV6, &ipv6_reg) != 0) {
+        DEBUG("Failed to register for ipv6 packets\n");
+    }
+
     while (1) {
         msg_receive(&msg);
 
         switch (msg.type) {
-        case GNRC_NETAPI_MSG_TYPE_RCV:
-            // Recieving Data. We can ignore this because we can get all the info we need out of sending only (simplifies things)
-            DEBUG("Capture: Received ");
-            print_debug_packet(msg.content.ptr);
-            gnrc_pktbuf_release(msg.content.ptr);
-            break;
-        case GNRC_NETAPI_MSG_TYPE_SND: {
-            // Sending data
+        case GNRC_NETAPI_MSG_TYPE_RCV: {
             gnrc_pktsnip_t *pkt = msg.content.ptr;
-            if (check_pkt_netif(pkt, radio_pid)) {
+            if (dont_filter(pkt, radio_pid)) {
+                DEBUG("Capture: Received ");
+                print_debug_packet(pkt);
+                add_capture_record(args->display_capture_list, msg.content.ptr, CAPTURE_EVENT_TYPE_RECV, args->config);
+            }
+            gnrc_pktbuf_release(msg.content.ptr);
+        } break;
+        case GNRC_NETAPI_MSG_TYPE_SND: {
+            gnrc_pktsnip_t *pkt = msg.content.ptr;
+            if (dont_filter(pkt, radio_pid)) {
                 // Remove netif header since both IPv6 and sixlowpan packets have it on
                 if (pkt->type == GNRC_NETTYPE_NETIF) {
                     pkt = pkt->next;
                 }
                 DEBUG("Capture: Sent ");
-                print_debug_packet(msg.content.ptr);
+                print_debug_packet(pkt);
 
-                add_capture_record(args->capture_list, pkt, CAPTURE_EVENT_TYPE_SEND);
+                add_capture_record(args->capture_list, pkt, CAPTURE_EVENT_TYPE_SEND, args->config);
+                add_capture_record(args->display_capture_list, pkt, CAPTURE_EVENT_TYPE_SEND, args->config);
             }
             gnrc_pktbuf_release(msg.content.ptr);
             break;

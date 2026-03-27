@@ -3,6 +3,7 @@
 #include "u8x8_riotos.h"
 #include "ztimer.h"
 #include "stdio.h"
+#include "string.h"
 
 #define ENABLE_DEBUG 0
 #include "debug.h"
@@ -11,32 +12,43 @@
 #include "records.h"
 #include "display.h"
 
-#define TIME_BETWEEN_DRAW_MS       100
-#define MAX_TIME_SINCE_CAPTURED_MS 500
+#define TIME_BETWEEN_DRAW_MS          50
+#define MAX_TIME_SINCE_CAPTURED_MS    500
 
-#define DISPLAY_DEACTIVATE_PIN     GPIO_PIN(0, 36) // OLED Power Control
-#define DISPLAY_RST_PIN            GPIO_PIN(0, 21) // OLED Reset
+#define DISPLAY_DEACTIVATE_PIN        GPIO_PIN(0, 36) // OLED Power Control
+#define DISPLAY_RST_PIN               GPIO_PIN(0, 21) // OLED Reset
 
-#define DISPLAY_I2C                0    // I2C Line, could be made into a
-#define DISPLAY_I2C_ADDR           0x3c // I2C Address
+#define DISPLAY_I2C                   0    // I2C Line, could be made into a
+#define DISPLAY_I2C_ADDR              0x3c // I2C Address
 
 // Maximum character widths for integers
-#define MAX_STRLEN                 30
-#define MAX_BAT_WIDTH              4 // Maximum value for battery, to prevent using more than four chars
-#define MAX_ID_WIDTH               2
-#define MAX_BYTE_WIDTH             5
-#define MAX_COUNT_WIDTH            5
+#define MAX_STRLEN                    30
+#define MAX_BAT_WIDTH                 4 // Maximum value for battery, to prevent using more than four chars
+#define MAX_ID_WIDTH                  2
+#define MAX_BYTE_WIDTH                5
+#define MAX_COUNT_WIDTH               5
+
+// Routing notification settings
+#define ROUTE_NOTIF_COMPLETE_SEGMENTS 7 // The max number of arrow segments or movements to make when displaying a routing notification
+#define ROUTE_NOTIF_TIME_PER_SEGMENT  50
+#define ROUTE_NOTIF_IN_PROGRESS_TIME  (ROUTE_NOTIF_COMPLETE_SEGMENTS * ROUTE_NOTIF_TIME_PER_SEGMENT)
+#define ROUTE_NOTIF_CLEAR_AFTER_MS    5000
+
+#define S_TO_MS                       1000
 
 // Allow integer widths to be used in string formatting
-#define _STRINGIFY(x)              #x
+#define _STRINGIFY(x)                 #x
 // Force expansion of the enclosed macro
-#define STR(macro)                 _STRINGIFY(macro)
+#define STR(macro)                    _STRINGIFY(macro)
 
-#define DEFAULT_PAD_X              3
-#define DEFAULT_PAD_Y              3
+#define DEFAULT_PAD_X                 3
+#define DEFAULT_PAD_Y                 3
 
-#define DISPLAY_THREAD_PRIORITY    (THREAD_PRIORITY_MAIN - 1)
+#define DISPLAY_THREAD_PRIORITY       (THREAD_PRIORITY_MAIN - 1)
 static char _stack[THREAD_STACKSIZE_MEDIUM];
+
+// For creating formatted strings for display (and using the stored string immediately)
+static char text_buffer[MAX_STRLEN];
 
 static u8g2_t u8g2;
 static u8x8_riotos_t user_data = {
@@ -46,10 +58,12 @@ static u8x8_riotos_t user_data = {
     .pin_reset = DISPLAY_RST_PIN,
 };
 
-static void next_line(unsigned int *cursor_x, unsigned int *cursor_y, unsigned int font_height, unsigned int pad_y)
+#define LINE_SPACE ((unsigned char)u8g2_GetMaxCharHeight(&u8g2) + DEFAULT_PAD_Y)
+
+static void next_line(unsigned int *cursor_x, unsigned int *cursor_y)
 {
     *cursor_x = 0;
-    *cursor_y += font_height + pad_y;
+    *cursor_y += LINE_SPACE;
 }
 
 static inline unsigned int clamp_width(unsigned int value, unsigned int width)
@@ -66,11 +80,128 @@ static inline unsigned int clamp_width(unsigned int value, unsigned int width)
     return value;
 }
 
-// Draw to the display, providng all parameters that will be shown on the display
-void draw_display(int display_route_notif, struct node_configuration *config, struct stats_record *stats)
-{
-    static char text_buffer[MAX_STRLEN];
+struct routing_notif_substate {
+    bool display;
+    unsigned int progress; // Progress of the animation, between 0 and 1000
+    unsigned int segs;
+    int dest;
+};
 
+struct routing_notif_state {
+    struct routing_notif_substate l3_in;
+    struct routing_notif_substate l3_out;
+};
+
+struct process_routing_state_inner_ctx {
+    stat_time_t now;
+    bool l3_in_complete;
+    bool l3_out_complete;
+    struct routing_notif_state *routing;
+};
+
+static int process_routing_substate(struct routing_notif_substate *substate, struct capture_record *record, stat_time_t now)
+{
+    if (record->time < now) {
+        stat_time_t diff = now - record->time;
+        unsigned int progress = diff;
+        if (progress > ROUTE_NOTIF_IN_PROGRESS_TIME) {
+            progress = ROUTE_NOTIF_IN_PROGRESS_TIME;
+        }
+        // Don't show when too old
+        substate->display = diff < ROUTE_NOTIF_CLEAR_AFTER_MS;
+        substate->progress = progress;
+        substate->dest = record->dest_id; //NOLINT. Prevent linter from suggesting we turn into unsigned char first to preserve bits
+        substate->segs = record->segments_left;
+    }
+    return 1;
+}
+
+static int process_routing_state_inner(uint8_t *record_data, size_t record_size, void *ctx)
+{
+    struct process_routing_state_inner_ctx *context = ctx;
+    if (context->l3_in_complete && context->l3_out_complete) {
+        // Stop iteration because we found records to use for each
+        return 1;
+    }
+
+    // Make sure we got the right type of data
+    assert(record_size == sizeof(struct capture_record));
+    struct capture_record record;
+    memcpy(&record, record_data, record_size);
+
+    // Only interested in L3 packets
+    if (record.packet_type == CAPTURE_PACKET_TYPE_SRV6 || record.packet_type == CAPTURE_PACKET_TYPE_IPV6) {
+        // Check what type of record this is, make sure we don't have it already
+        if (!context->l3_out_complete && record.event_type == CAPTURE_EVENT_TYPE_SEND) {
+            context->l3_out_complete = process_routing_substate(&context->routing->l3_out, &record, context->now);
+        }
+        else if (!context->l3_in_complete && record.event_type == CAPTURE_EVENT_TYPE_RECV) {
+            context->l3_in_complete = process_routing_substate(&context->routing->l3_in, &record, context->now);
+        }
+    }
+
+    return context->l3_in_complete && context->l3_out_complete;
+}
+static void process_routing_state(struct routing_notif_state *routing, struct record_list *capture_records)
+{
+    routing->l3_in.display = false;
+    routing->l3_out.display = false;
+
+    struct process_routing_state_inner_ctx context = {
+        .now = ztimer_now(ZTIMER_MSEC),
+        .l3_in_complete = false,
+        .l3_out_complete = false,
+        .routing = routing,
+    };
+    record_list_iter(capture_records, process_routing_state_inner, &context);
+}
+
+static void draw_route_notif_arrow(struct routing_notif_substate *substate, unsigned int cursor_x, unsigned int cursor_y)
+{
+    // Draw routing arrows
+    cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "[");
+    unsigned int chars_used = 0;
+    if (substate->display) {
+        chars_used += substate->progress / ROUTE_NOTIF_TIME_PER_SEGMENT;
+        for (unsigned int i = 0; i < chars_used; i++) {
+            cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "-");
+        }
+        chars_used += 1;
+        cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, ">");
+    }
+    // Fill rest of bar in with empty spaces (account for arrow head and arrow segments)
+    for (unsigned int i = 0; i < ((ROUTE_NOTIF_COMPLETE_SEGMENTS + 1) - chars_used); i++) {
+        cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, " ");
+    }
+    u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "]");
+}
+
+static void draw_route_notif_info(struct routing_notif_substate *substate, unsigned int cursor_x, unsigned int cursor_y)
+{
+    if (substate->display) {
+        snprintf(text_buffer, sizeof(text_buffer), "DEST %d", substate->dest);
+        u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer);
+        cursor_y += LINE_SPACE;
+        snprintf(text_buffer, sizeof(text_buffer), "SEGS %u", substate->segs);
+        u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer);
+    }
+    else {
+        u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "DEST -");
+        cursor_y += LINE_SPACE;
+        u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "SEGS -");
+    }
+}
+
+static void draw_route_notif(struct routing_notif_substate *substate, unsigned int cursor_x, unsigned int cursor_y)
+{
+    draw_route_notif_arrow(substate, cursor_x, cursor_y);
+    cursor_y += LINE_SPACE;
+    draw_route_notif_info(substate, cursor_x, cursor_y);
+}
+
+// Draw to the display, providng all parameters that will be shown on the display
+static void draw_display(struct routing_notif_state *routing, struct stats_record *stats, struct node_configuration *config)
+{
     // Use a monospaced (for readability and predictability in size of output) font with restricted character set (less overhead from unused chars)
     u8g2_SetFont(&u8g2, u8g2_font_6x10_mr);
     const unsigned int font_height = (unsigned char)u8g2_GetMaxCharHeight(&u8g2);
@@ -87,40 +218,25 @@ void draw_display(int display_route_notif, struct node_configuration *config, st
         snprintf(text_buffer, sizeof(text_buffer), "%." STR(MAX_BAT_WIDTH) "dmV", clamp_width(stats->millivolts, MAX_BAT_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
 
-        next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
-
-        // Draw the configuration
+        // Draw configuration
 
         snprintf(text_buffer, sizeof(text_buffer), "ID:%." STR(MAX_ID_WIDTH) "d", clamp_width(config->this_id, MAX_ID_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
-        snprintf(text_buffer, sizeof(text_buffer), "TO:%." STR(MAX_ID_WIDTH) "d", clamp_width(config->topology_id, MAX_ID_WIDTH));
-        cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
-        snprintf(text_buffer, sizeof(text_buffer), "SR:%." STR(MAX_ID_WIDTH) "d", clamp_width(config->use_srv6, MAX_ID_WIDTH));
-        cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
-        snprintf(text_buffer, sizeof(text_buffer), "TP:%." STR(MAX_ID_WIDTH) "d", clamp_width(config->throughput_test, MAX_ID_WIDTH));
+        snprintf(text_buffer, sizeof(text_buffer), "TOPO:%." STR(MAX_ID_WIDTH) "d", clamp_width(config->topology_id, MAX_ID_WIDTH));
         cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer) + DEFAULT_PAD_X;
 
-        next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
+        next_line(&cursor_x, &cursor_y);
 
         // Draw routing notification
 
-        if (display_route_notif) {
-            cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "|ROUTED|");
-        }
-        next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
+        unsigned int width = u8g2_GetDisplayWidth(&u8g2);
+        unsigned int half_width = width / 2;
 
-        // Draw interface stats
+        u8g2_DrawStr(&u8g2, 0, cursor_y, "IN");
+        draw_route_notif(&routing->l3_in, 0, cursor_y + LINE_SPACE);
 
-        cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, "STATS");
-        next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
-
-        snprintf(text_buffer, sizeof(text_buffer), "TX %u RX %u",
-                 clamp_width(stats->l3.tx_unicast_count, MAX_COUNT_WIDTH),
-                 clamp_width(stats->l3.rx_count, MAX_COUNT_WIDTH));
-        cursor_x += u8g2_DrawStr(&u8g2, cursor_x, cursor_y, text_buffer);
-        next_line(&cursor_x, &cursor_y, font_height, DEFAULT_PAD_Y);
-
-        // Look into special fonts with icons for better UI elements
+        u8g2_DrawStr(&u8g2, half_width, cursor_y, "OUT");
+        draw_route_notif(&routing->l3_out, half_width, cursor_y + LINE_SPACE);
     } while (u8g2_NextPage(&u8g2));
 }
 
@@ -129,22 +245,16 @@ static void *_display_loop(void *ctx)
     struct display_thread_args *args = ctx;
 
     struct stats_record stats = { 0 };
-    struct capture_record capture = { 0 };
 
     while (1) {
         // By not handling empty case - either print zeroed capture or keep whatever we had last
         record_list_first(args->stats_list, (uint8_t *)&stats, sizeof(stats));
-        record_list_first(args->capture_list, (uint8_t *)&capture, sizeof(capture));
 
-        int display_route_notif = 0;
-        ztimer_now_t time = ztimer_now(ZTIMER_MSEC);
-        if (time - capture.time < MAX_TIME_SINCE_CAPTURED_MS) {
-            display_route_notif = 1;
-        }
+        struct routing_notif_state routing = { 0 };
+        process_routing_state(&routing, args->display_capture_list);
 
-        draw_display(display_route_notif, args->config, &stats);
+        draw_display(&routing, &stats, args->config);
         // 4Hz refresh rate to not use up too much battery life, hopefully
-        DEBUG("Display sleeping\n");
         ztimer_sleep(ZTIMER_MSEC, TIME_BETWEEN_DRAW_MS);
     }
     return NULL;
