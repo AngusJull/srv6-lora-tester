@@ -29,18 +29,16 @@
 #define MAX_COUNT_WIDTH                  5
 
 // Routing notification settings for l3 packets
-#define ROUTE_NOTIF_L3_COMPLETE_SEGMENTS 3 // The max number of arrow segments or movements to make when displaying a routing notification
+#define ROUTE_NOTIF_L3_COMPLETE_SEGMENTS 2 // The max number of arrow segments or movements to make when displaying a routing notification
 #define ROUTE_NOTIF_L3_TIME_PER_SEGMENT  50
 #define ROUTE_NOTIF_L3_IN_PROGRESS_TIME  (ROUTE_NOTIF_L3_COMPLETE_SEGMENTS * ROUTE_NOTIF_L3_TIME_PER_SEGMENT)
 
 // For l2 packest
-#define ROUTE_NOTIF_L2_COMPLETE_SEGMENTS 2 // The max number of arrow segments or movements to make when displaying a routing notification
-#define ROUTE_NOTIF_L2_TIME_PER_SEGMENT  75
+#define ROUTE_NOTIF_L2_COMPLETE_SEGMENTS 3 // The max number of arrow segments or movements to make when displaying a routing notification
+#define ROUTE_NOTIF_L2_TIME_PER_SEGMENT  50
 #define ROUTE_NOTIF_L2_IN_PROGRESS_TIME  (ROUTE_NOTIF_L2_COMPLETE_SEGMENTS * ROUTE_NOTIF_L2_TIME_PER_SEGMENT)
 
-#define ROUTE_NOTIF_CLEAR_AFTER_MS       5000
-
-#define S_TO_MS                          1000
+#define ROUTE_NOTIF_CLEAR_AFTER_MS       3500
 
 // Allow integer widths to be used in string formatting
 #define _STRINGIFY(x)                    #x
@@ -213,7 +211,7 @@ static unsigned int draw_route_notif_arrow(bool display, unsigned int progress, 
     if (display) {
         chars_used += progress / progress_per_seg;
         for (unsigned int i = 0; i < chars_used; i++) {
-            offset_x += u8g2_DrawStr(&u8g2, cursor_x + offset_x, cursor_y, "-");
+            offset_x += u8g2_DrawStr(&u8g2, cursor_x + offset_x, cursor_y, "=");
         }
         chars_used += 1;
         offset_x += u8g2_DrawStr(&u8g2, cursor_x + offset_x, cursor_y, ">");
